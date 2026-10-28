@@ -1,0 +1,5 @@
+<p>Hi,</p>
+<p>Welcome to {{.AppName}}. Please verify your email by opening the link below (expires {{.Expiry}}):</p>
+<p><a href="{{.ActionURL}}">Verify email</a></p>
+<p>If you did not sign up, ignore this message.</p>
+{{if .SupportAddress}}<p>Support: {{.SupportAddress}}</p>{{end}}

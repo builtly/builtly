@@ -1,0 +1,941 @@
+/* Admin chrome on top of vendored Pico.css. Keep layout-only rules here. */
+
+/*
+ * Pico scales --pico-font-size up with viewport (106%→131% on wide screens),
+ * which makes the whole admin UI feel oversized. Lock a denser admin scale.
+ */
+:root {
+  --pico-font-size: 93.75% !important; /* ~15px; defeats Pico's responsive bumps */
+  --pico-line-height: 1.45;
+  --pico-spacing: 0.75rem;
+  --pico-typography-spacing-vertical: 0.75rem;
+  --pico-form-element-spacing-vertical: 0.5rem;
+  --pico-form-element-spacing-horizontal: 0.75rem;
+  --pico-nav-element-spacing-vertical: 0.5rem;
+  --pico-nav-element-spacing-horizontal: 0.5rem;
+
+  --admin-sidebar: 14rem;
+  --admin-sidebar-bg: #111827;
+  --admin-sidebar-fg: #e5e7eb;
+  --admin-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+}
+
+/* Pico defaults h1=2rem / h2=1.75rem with large top spacing — too big for admin chrome. */
+h1 {
+  --pico-font-size: 1.35rem;
+  --pico-line-height: 1.25;
+  --pico-typography-spacing-top: 1.25rem;
+}
+h2 {
+  --pico-font-size: 1.1rem;
+  --pico-line-height: 1.3;
+  --pico-typography-spacing-top: 1rem;
+}
+h3 {
+  --pico-font-size: 1rem;
+  --pico-typography-spacing-top: 0.75rem;
+}
+
+[x-cloak] { display: none !important; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body > #app {
+  min-height: 100vh;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--admin-sidebar) 1fr;
+  min-height: 100vh;
+  align-items: start; /* sidebar height ≠ main content height */
+}
+
+/*
+ * Isolate admin chrome from Pico. Never use <nav> here — Pico sets
+ * `nav, nav ul { display:flex }` (row) and breaks the sidebar.
+ */
+.sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+  background: var(--admin-sidebar-bg);
+  color: var(--admin-sidebar-fg);
+  padding: 1.25rem 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden; /* .side-nav scrolls independently */
+}
+
+.sidebar .brand {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+  margin: 0;
+  color: #fff;
+}
+
+.app-switcher {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  width: auto;
+  cursor: default;
+}
+
+.app-switcher span {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.app-switcher select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.35rem;
+  border: 1px solid #374151;
+  background: #0b1220;
+  color: #f3f4f6;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.3;
+}
+
+.app-switcher select:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+}
+
+.nav-hint {
+  margin: 0.15rem 0 0.35rem;
+  padding: 0 0.6rem;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+
+.side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.side-nav a {
+  display: block;
+  color: #cbd5e1;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  font-size: 0.92rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.side-nav a:hover,
+.side-nav a[aria-current="page"] {
+  background: #1f2937;
+  color: #fff;
+  text-decoration: none;
+}
+
+.sidebar .nav-section {
+  margin: 0.85rem 0 0.2rem;
+  padding: 0 0.6rem;
+  font-size: 0.68rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.sidebar .nav-section:first-child {
+  margin-top: 0.15rem;
+}
+
+.sidebar .logout {
+  flex: 0 0 auto;
+  margin-top: 0.75rem;
+  width: 100% !important;
+  max-width: 100%;
+}
+
+.main {
+  padding: 1rem 1.25rem 2rem;
+  min-width: 0; /* allow grid child to shrink; tables scroll inside */
+  max-width: 100%;
+  width: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--pico-muted-border-color, #e7eaef);
+}
+
+.topbar-app {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem 0.75rem;
+  min-width: 0;
+}
+
+.topbar-app strong {
+  font-size: 1rem;
+}
+
+.main h1 {
+  margin-bottom: 0.75rem;
+}
+
+.main > header {
+  margin-bottom: 1rem;
+}
+
+.panel {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--pico-muted-border-color, #e7eaef);
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  --pico-typography-spacing-top: 0;
+}
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+}
+
+.stat {
+  flex: 1 1 12rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--pico-muted-border-color, #e7eaef);
+  border-radius: 0.5rem;
+  background: #fafbfc;
+}
+
+.stat-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.stat-value {
+  margin-top: 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.bind-group {
+  margin: 0 0 1.5rem;
+}
+
+.bind-group > h2 {
+  margin: 0 0 0.65rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--pico-muted-border-color, #e7eaef);
+  --pico-typography-spacing-top: 0;
+}
+
+.bind-row {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--pico-muted-border-color, #eef1f5);
+  border-radius: 0.45rem;
+  background: #fcfcfd;
+}
+
+.bind-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.bind-head a {
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.bind-head a:hover {
+  text-decoration: underline;
+}
+
+details.advanced {
+  margin: 0.5rem 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px dashed var(--pico-muted-border-color, #d8dce3);
+  border-radius: 0.45rem;
+}
+
+details.advanced summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.banner {
+  margin-bottom: 1rem;
+}
+
+.banner[data-tone="ok"] {
+  --pico-background-color: #e8f5e9;
+  --pico-border-color: #a5d6a7;
+  --pico-color: #2e7d32;
+}
+
+.banner[data-tone="err"] {
+  --pico-background-color: #fdecea;
+  --pico-border-color: #f5c2c0;
+  --pico-color: #c62828;
+}
+
+/*
+ * Pico uses `button[type=submit] { width:100% }` (0,1,1). Match that specificity.
+ * Sidebar logout keeps an explicit full width below.
+ */
+button[type="submit"],
+button[type="button"],
+button[type="reset"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+[role="button"] {
+  width: auto !important;
+  max-width: 100%;
+}
+
+/* Filter / search bars: fields left, action right */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.toolbar-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toolbar-fields label {
+  margin-bottom: 0;
+}
+
+.toolbar-fields input,
+.toolbar-fields select,
+.toolbar input,
+.toolbar select {
+  margin-bottom: 0;
+  width: auto;
+  min-width: 10rem;
+}
+
+.toolbar > button,
+.toolbar > .toolbar-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Create / save / cancel: always bottom-right */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.form-actions button {
+  margin: 0;
+}
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.form-row > .field {
+  flex: 1 1 12rem;
+}
+
+.form-row label {
+  margin-bottom: 0;
+}
+
+/* Underline tabs (app sections, etc.) — not pill buttons */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border-bottom: 1px solid var(--pico-muted-border-color, #d8dce3);
+}
+
+.tabs a,
+.tabs button {
+  position: relative;
+  padding: 0.6rem 0.95rem;
+  margin: 0 0 -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pico-muted-color, #5c6570);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 500;
+  width: auto;
+  line-height: 1.3;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.tabs a:hover,
+.tabs button:hover {
+  color: var(--pico-color, #1b1f24);
+  background: transparent;
+  text-decoration: none;
+}
+
+.tabs a[aria-current="page"],
+.tabs button[aria-current="page"] {
+  color: var(--pico-color, #1b1f24);
+  background: transparent;
+  border-bottom-color: var(--pico-primary-background, #1f6feb);
+  font-weight: 600;
+}
+
+.page-head {
+  margin-bottom: 1.25rem;
+}
+
+.page-head h1 {
+  margin: 0;
+  --pico-typography-spacing-top: 0;
+}
+
+.page-head p {
+  margin: 0.2rem 0 0;
+}
+
+.page-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.page-head-row > button {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+/* Native <dialog> modal for dense create/edit forms */
+.modal {
+  margin: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  max-width: min(36rem, calc(100vw - 2rem));
+  width: 100%;
+  color: inherit;
+}
+
+.modal::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.modal-card {
+  background: #fff;
+  border: 1px solid var(--pico-muted-border-color, #e7eaef);
+  border-radius: 0.5rem;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+  padding: 1.1rem 1.25rem 1.25rem;
+  max-height: min(90vh, 90dvh);
+  overflow: auto;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.modal-head h2 {
+  margin: 0;
+  --pico-typography-spacing-top: 0;
+  font-size: 1.1rem;
+}
+
+.modal-head .modal-close {
+  margin: 0;
+  width: auto;
+  padding: 0.25rem 0.55rem;
+  line-height: 1.2;
+}
+
+/* Connections: quiet group rail + list-first panel */
+.conn-layout {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: 0 1.75rem;
+  align-items: start;
+  min-height: 20rem;
+}
+
+.conn-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 0.75rem;
+  margin: 0;
+  padding: 0 1rem 0 0;
+  border-right: 1px solid var(--pico-muted-border-color, #e7eaef);
+}
+
+.conn-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+}
+
+.conn-nav-label {
+  margin: 0 0 0.2rem;
+  padding: 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color, #5c6570);
+  line-height: 1.3;
+}
+
+.conn-nav a {
+  display: block;
+  padding: 0.35rem 0.5rem;
+  margin: 0;
+  border-radius: 0.3rem;
+  color: var(--pico-color, #373c44);
+  text-decoration: none;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.conn-nav a:hover {
+  background: rgba(15, 23, 42, 0.04);
+  text-decoration: none;
+}
+
+.conn-nav a[aria-current="page"] {
+  background: rgba(1, 114, 173, 0.1);
+  color: var(--pico-primary, #0172ad);
+  font-weight: 600;
+}
+
+.conn-panel {
+  min-width: 0;
+}
+
+.conn-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--pico-muted-border-color, #e7eaef);
+}
+
+.conn-toolbar > div {
+  min-width: 0;
+}
+
+.conn-title {
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--pico-h1-color, #2d3138);
+}
+
+.conn-toolbar > button {
+  margin: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.conn-drawer {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--pico-muted-border-color, #e7eaef);
+  border-radius: 0.5rem;
+  background: #fafbfc;
+}
+
+.conn-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.conn-drawer-head h3 {
+  margin: 0;
+  --pico-typography-spacing-top: 0;
+  --pico-font-size: 1rem;
+}
+
+.conn-drawer-head button {
+  width: auto;
+  margin: 0;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.conn-fieldset {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0 0;
+  border: none;
+  border-top: 1px solid var(--pico-muted-border-color, #e7eaef);
+}
+
+.conn-fieldset legend {
+  padding: 0;
+  margin: 0 0 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.conn-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.conn-form-actions button {
+  margin: 0;
+}
+
+.conn-table {
+  margin-bottom: 0;
+}
+
+.conn-table th:last-child,
+.conn-table td.actions {
+  text-align: right;
+}
+
+.conn-name {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.row-actions button {
+  width: auto;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #eef1f5;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.conn-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--pico-muted-border-color, #d8dce3);
+  border-radius: 0.5rem;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.conn-empty p {
+  margin: 0 0 0.85rem;
+}
+
+.conn-empty button {
+  width: auto;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .conn-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .conn-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.85rem 1.25rem;
+    border-right: none;
+    border-bottom: 1px solid var(--pico-muted-border-color, #e7eaef);
+    padding: 0 0 0.85rem;
+  }
+  .conn-nav-group {
+    min-width: 7.5rem;
+  }
+}
+
+.field {
+  margin-bottom: 0.7rem;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.field label.checkbox {
+  font-weight: 400;
+}
+
+.field .hint,
+.conn-fieldset > .hint {
+  margin: 0.2rem 0 0.55rem;
+  font-size: 0.82em;
+  color: var(--pico-muted-color, #5c6570);
+}
+
+.mono {
+  font-family: var(--admin-mono);
+  font-size: 0.85em;
+}
+
+.muted { color: var(--pico-muted-color, #5c6570); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+
+.cell-wrap {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.secret-once {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  margin: 0.75rem 0;
+  word-break: break-all;
+  font-family: var(--admin-mono);
+  font-size: 0.85rem;
+}
+
+.secret-once-strong {
+  margin: 0 0 1rem;
+  padding: 1rem 1.1rem;
+  border-width: 2px;
+  border-color: #f59e0b;
+  background: #fffbeb;
+  font-family: inherit;
+}
+
+.secret-once-warn {
+  margin: 0 0 0.75rem;
+  color: #92400e;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.secret-once-value {
+  display: block;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.35rem;
+  background: #0f172a;
+  color: #f8fafc;
+  font-family: var(--admin-mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  word-break: break-all;
+  user-select: all;
+}
+
+.actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.actions button,
+td button {
+  width: auto;
+  margin: 0;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+button.danger,
+button[data-danger] {
+  --pico-background-color: #c62828;
+  --pico-border-color: #c62828;
+  --pico-color: #fff;
+}
+
+.empty {
+  color: var(--pico-muted-color, #5c6570);
+  padding: 1rem 0;
+}
+
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.login-wrap article {
+  width: min(100%, 26rem);
+  margin: 0;
+}
+
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+.table-wrap > table {
+  width: 100%;
+  min-width: 36rem;
+  table-layout: auto;
+  margin-bottom: 0;
+}
+
+.table-wrap th,
+.table-wrap td {
+  vertical-align: top;
+}
+
+.table-wrap .mono-id {
+  font-family: var(--admin-mono);
+  font-size: 0.8em;
+  white-space: nowrap;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-wrap td.actions {
+  white-space: nowrap;
+  width: 1%;
+}
+
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    height: auto;
+    overflow: visible;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .side-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    overflow: visible;
+  }
+  .sidebar .logout {
+    margin-top: 0;
+    width: auto;
+    align-self: flex-start;
+  }
+  .sidebar .nav-section {
+    flex: 1 0 100%;
+    margin-top: 0.35rem;
+  }
+  .table-wrap > table { min-width: 28rem; }
+}

@@ -28,6 +28,12 @@ go.work.sum
 # env file
 .env
 
+# Local SQLite / binaries
+*.db
+*.db-*
+/builtly
+/bin/
+
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
