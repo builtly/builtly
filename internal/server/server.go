@@ -30,6 +30,7 @@ import (
 	"github.com/builtly/builtly/internal/referral"
 	"github.com/builtly/builtly/internal/storage"
 	"github.com/builtly/builtly/internal/tenant"
+	"github.com/builtly/builtly/internal/version"
 	"github.com/builtly/builtly/web"
 )
 
@@ -248,7 +249,10 @@ func spaFileServer(fsys fs.FS) http.Handler {
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": version.Version,
+	})
 }
 
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {

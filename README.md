@@ -26,9 +26,9 @@ Config order: **process env → data-dir `builtly.json` → defaults**. After lo
 Databases in the wizard: **SQLite local** (single node), **SQLite cloud / Turso (libSQL)** (multi-node OK), **Postgres** (Neon / Supabase / self-hosted). Multi-node: use the wizard’s Copy env / Download `builtly.json` into platform Secrets on every machine.
 
 ```bash
-docker compose up --build postgres builtly
-# API http://localhost:8080  ·  Admin http://localhost:8080/admin/#/setup
-docker compose --profile test run --rm test
+docker compose up --build          # SQLite on the /data volume; setup wizard at /admin/#/setup
+# API http://localhost:8080
+docker compose --profile test run --rm test   # also starts Postgres for dialect tests
 ```
 
 ### First admin steps

@@ -1,5 +1,23 @@
 services:
+  builtly:
+    build: .
+    environment:
+      # Unconfigured on purpose — complete /admin/#/setup after start (default: SQLite on /data).
+      BUILTLY_ENV: development
+      BUILTLY_HTTP_ADDR: ":8080"
+      BUILTLY_DATA_DIR: /data
+      BUILTLY_LOG_FORMAT: text
+      BUILTLY_LOG_LEVEL: info
+      BUILTLY_WORKERS_ENABLED: "false"
+      BUILTLY_SETUP_TOKEN: local-setup-token-change-me-please-32b
+    volumes:
+      - builtly-data:/data
+    ports:
+      - "8080:8080"
+
+  # Optional Postgres for CI / dialect tests: docker compose --profile test run --rm test
   postgres:
+    profiles: ["test", "postgres"]
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: builtly
@@ -16,29 +34,6 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/02-test.sql:ro
 
-  builtly:
-    build: .
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      # Unconfigured on purpose — complete /admin/#/setup after start.
-      BUILTLY_ENV: development
-      BUILTLY_HTTP_ADDR: ":8080"
-      BUILTLY_DATA_DIR: /data
-      BUILTLY_LOG_FORMAT: text
-      BUILTLY_LOG_LEVEL: info
-      BUILTLY_WORKERS_ENABLED: "false"
-      BUILTLY_SETUP_TOKEN: local-setup-token-change-me-please-32b
-      # Postgres is available for the wizard; not pre-bound:
-      # host=postgres user/pass/db=builtly  →
-      # postgres://builtly:builtly@postgres:5432/builtly?sslmode=disable
-    volumes:
-      - builtly-data:/data
-    ports:
-      - "8080:8080"
-
-  # Opt-in: docker compose --profile test run --rm test
   test:
     profiles: ["test"]
     image: golang:1.26-bookworm
@@ -55,5 +50,5 @@ services:
     command: ["go", "test", "-race", "./..."]
 
 volumes:
-  pgdata:
   builtly-data:
+  pgdata:

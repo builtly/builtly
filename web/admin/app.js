@@ -29,10 +29,39 @@ let mainEl = null;
 const GITHUB_URL = "https://github.com/builtly/builtly";
 const GITHUB_ICON = `<svg class="gh-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`;
 
+/** @type {string} */
+let appVersion = "dev";
+
+async function loadVersion() {
+  try {
+    const res = await fetch("/healthz");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && data.version) appVersion = String(data.version);
+  } catch {
+    /* keep default */
+  }
+}
+
 function githubLink(className, { label = true } = {}) {
   const text = label ? `<span>GitHub</span>` : "";
   const aria = label ? "" : ` aria-label="GitHub"`;
   return `<a class="${className}" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer"${aria}>${GITHUB_ICON}${text}</a>`;
+}
+
+/** Version + GitHub row (sidebar foot / login+setup meta). */
+function buildMeta(variant) {
+  const ver = esc(appVersion);
+  if (variant === "sidebar") {
+    return `<div class="sidebar__foot">
+      <span class="sidebar__version" title="Builtly ${ver}">${ver}</span>
+      ${githubLink("sidebar__github")}
+    </div>`;
+  }
+  return `<div class="login-meta">
+    <span class="login-meta__version" title="Builtly ${ver}">${ver}</span>
+    ${githubLink("login-github")}
+  </div>`;
 }
 
 onError((err) => {
@@ -122,7 +151,6 @@ function shellHTML(parts, apps) {
           </div>
         </div>
         <div class="sidebar__head-actions">
-          ${githubLink("sidebar__github", { label: false })}
           <button type="button" class="sidebar__close" id="sidebar-close" aria-label="Close menu">✕</button>
         </div>
       </div>
@@ -141,6 +169,7 @@ function shellHTML(parts, apps) {
         ${navLink("#/audit", "Audit log", parts[0] === "audit")}
       </div>
       <button type="button" class="logout" id="logout-btn">Log out</button>
+      ${buildMeta("sidebar")}
     </aside>
     <div class="main">
       <div id="view"></div>
@@ -298,10 +327,10 @@ function renderLogin() {
               <span>Show token</span>
             </label>
             <div class="login-form__footer">
-              ${githubLink("login-github")}
               <button type="submit" class="login-form__submit">Continue</button>
             </div>
           </form>
+          ${buildMeta("login")}
         </div>
       </div>
     </div>`;
@@ -430,10 +459,12 @@ async function route() {
 }
 
 async function boot() {
+  await loadVersion();
   try {
     const status = await fetchSetupStatus();
     if (status.needs_setup || location.hash === "#/setup") {
       await renderSetup(root, {
+        version: appVersion,
         onConfigured: () => {
           location.hash = "#/apps";
           boot();

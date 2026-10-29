@@ -119,32 +119,59 @@ body > #app {
   flex: 0 0 auto;
 }
 
+.sidebar__foot {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin: 0.1rem 0 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--admin-sidebar-line);
+}
+
+.sidebar__version {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--admin-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.68rem;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: var(--admin-sidebar-muted);
+}
+
 .sidebar__github {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  flex: 0 0 auto;
+  gap: 0.35rem;
   margin: 0;
-  width: 2rem;
-  height: 2rem;
   padding: 0;
-  border: 1px solid var(--admin-sidebar-line);
-  border-radius: 0.1rem;
+  border: none;
   background: transparent;
   color: var(--admin-sidebar-muted);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-decoration: none;
-  line-height: 1;
+  line-height: 1.2;
 }
 
 .sidebar__github .gh-icon {
   flex: 0 0 auto;
   display: block;
-  width: 1rem;
-  height: 1rem;
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .sidebar__github:hover {
   color: #fff;
-  border-color: #f3f1eb;
   text-decoration: none;
 }
 
@@ -1678,9 +1705,33 @@ button[data-danger] {
 .login-form__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.75rem;
   margin: 0;
+}
+
+.login-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(26, 31, 43, 0.12);
+}
+
+.login-meta__version {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--admin-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.68rem;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: rgba(26, 31, 43, 0.55);
 }
 
 .login-github {
@@ -1701,6 +1752,16 @@ button[data-danger] {
   text-decoration: none;
   line-height: 1.2;
   box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.1);
+}
+
+.login-meta .login-github {
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(26, 31, 43, 0.55);
+  font-size: 0.68rem;
 }
 
 .login-github .gh-icon {

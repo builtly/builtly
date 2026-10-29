@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/builtly/builtly/internal/config"
+	"github.com/builtly/builtly/internal/platform/httpx"
+	"github.com/builtly/builtly/internal/version"
 	"github.com/builtly/builtly/web"
 )
 
@@ -19,8 +21,10 @@ func Run(ctx context.Context, cfg *config.Config, log *slog.Logger, onDone func(
 	h := &Handler{Cfg: cfg, OnDone: onDone}
 	r := chi.NewRouter()
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{
+			"status":  "ok",
+			"version": version.Version,
+		})
 	})
 	h.Mount(r)
 
