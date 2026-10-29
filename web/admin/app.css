@@ -2325,6 +2325,404 @@ button[data-danger] {
   --pico-color: var(--user-amber);
 }
 
+/* Activity — purchases + ledger roster */
+.act-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+  border-bottom: 1.5px solid var(--user-ink);
+}
+
+.act-tabs a {
+  position: relative;
+  padding: 0.55rem 0.9rem;
+  margin: 0 0 -1.5px;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #5c6570;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-color: #5c6570;
+}
+
+.act-tabs a:hover {
+  color: var(--user-amber);
+  background: transparent;
+  text-decoration: none;
+  --pico-color: var(--user-amber);
+}
+
+.act-tabs a[aria-current="page"] {
+  color: var(--user-ink);
+  border-bottom-color: var(--user-amber);
+  --pico-color: var(--user-ink);
+}
+
+.act-filters,
+.ref-filters {
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+
+/* Keep Filter button in the flow — toolbar's margin-left:auto made gaps uneven. */
+.act-filters > button,
+.ref-filters > button {
+  margin-left: 0;
+  height: 2.5rem;
+  padding: 0 0.85rem;
+}
+
+.act-filters__fields,
+.ref-filters__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.act-filters__fields > input {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  width: auto;
+  margin: 0;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+  font-family: var(--admin-sans);
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+/* Fixed wrapper width — don't let toolbar select min-width:10rem overflow and eat the gap. */
+.act-filters__select,
+.ref-filters__select {
+  flex: 0 0 10.5rem;
+  width: 10.5rem;
+  min-width: 10.5rem;
+  max-width: 10.5rem;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.ref-filters__select {
+  flex-basis: 11rem;
+  width: 11rem;
+  min-width: 11rem;
+  max-width: 11rem;
+}
+
+.act-filters__select select,
+.act-filters__select .choice-trigger,
+.ref-filters__select select,
+.ref-filters__select .choice-trigger {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background-color: #fff;
+  color: var(--user-ink);
+  font-family: var(--admin-sans);
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: calc(2.5rem - 3px);
+  box-shadow: none;
+  width: 100% !important;
+  min-width: 0 !important; /* override .toolbar-fields select { min-width: 10rem } */
+  max-width: 100%;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+  --pico-font-family: var(--admin-sans);
+  --pico-font-size: 0.9rem;
+}
+
+.act-filters__select select,
+.ref-filters__select select {
+  display: block;
+  padding-right: 1.75rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236b7280' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 0.55rem;
+}
+
+.act-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.act-table {
+  min-width: 52rem;
+}
+
+.act-table--ledger {
+  min-width: 48rem;
+}
+
+.act-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.act-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.act-row:hover td {
+  background: transparent;
+}
+
+.act-row td {
+  vertical-align: middle;
+  height: 3rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .act-row { animation: none; }
+}
+
+.act-user {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  max-width: 14rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.act-user:hover .act-user__email {
+  color: var(--user-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.act-user__email {
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--user-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.act-user__id,
+.act-user--id {
+  font-size: 0.72rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.act-user--id:hover {
+  color: var(--user-amber);
+}
+
+.act-provider {
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5c6570;
+}
+
+.act-product__sku,
+.act-type {
+  font-size: 0.82rem;
+  color: var(--user-ink);
+}
+
+.act-num,
+.act-money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.act-num--pos {
+  color: var(--user-teal);
+  font-weight: 650;
+}
+
+.act-num--neg {
+  color: var(--user-warn);
+  font-weight: 650;
+}
+
+.act-actor {
+  font-size: 0.82rem;
+  color: #5c6570;
+  white-space: nowrap;
+}
+
+.act-reason,
+.act-ref {
+  max-width: 10rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Referrals — invite attribution roster */
+.ref-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.ref-table {
+  min-width: 44rem;
+}
+
+.ref-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.ref-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.ref-row:hover td {
+  background: transparent;
+}
+
+.ref-row td {
+  vertical-align: middle;
+  height: 3rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ref-row { animation: none; }
+}
+
+.ref-party {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  max-width: 14rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.ref-party:hover .ref-party__email {
+  color: var(--user-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ref-party__email {
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--user-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-party__id,
+.ref-party--id {
+  font-size: 0.72rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-party--id:hover {
+  color: var(--user-amber);
+}
+
+.ref-code {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.ref-rewards {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.ref-rewards__count {
+  font-weight: 650;
+  color: var(--user-ink);
+}
+
+.ref-rewards__sep {
+  margin: 0 0.2rem;
+  color: #8a8490;
+}
+
+.ref-rewards__credits {
+  color: #5c6570;
+  font-size: 0.82rem;
+}
+
+.ref-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.ref-void {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--user-warn);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--user-warn);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: var(--user-warn);
+  --pico-color: var(--user-warn);
+  --pico-border-radius: 0.1rem;
+}
+
+.ref-void:hover {
+  background: rgba(154, 52, 18, 0.08);
+  --pico-background-color: rgba(154, 52, 18, 0.08);
+}
+
 /* Users — industrial ops casefile (roster + dossier) */
 
 .user-page-head {
@@ -2426,6 +2824,7 @@ button[data-danger] {
 
 /* Users controls — match casefile ink/paper (override Pico soft radius) */
 .user-search input,
+.act-filters input,
 .user-adjust input,
 .user-adjust select {
   margin-bottom: 0;
@@ -2470,6 +2869,7 @@ button[data-danger] {
 }
 
 .user-search input:focus,
+.act-filters input:focus,
 .user-adjust input:focus,
 .user-adjust select:focus {
   outline: 2px solid var(--user-amber);
@@ -2487,6 +2887,7 @@ button[data-danger] {
 }
 
 .user-search button[type="submit"],
+.act-filters button[type="submit"],
 .user-dossier__actions button[type="button"],
 .user-adjust button[type="submit"],
 .user-adjust button[type="button"] {
@@ -2510,6 +2911,7 @@ button[data-danger] {
 }
 
 .user-search button[type="submit"]:hover,
+.act-filters button[type="submit"]:hover,
 .user-dossier__actions button[type="button"]:hover,
 .user-adjust button[type="submit"]:hover {
   background: #2a3142;
@@ -2713,6 +3115,11 @@ img.user-avatar {
 .user-stamp--active {
   color: var(--user-teal);
   background: rgba(15, 107, 92, 0.08);
+}
+
+.user-stamp--pending {
+  color: var(--user-amber);
+  background: rgba(196, 92, 22, 0.1);
 }
 
 .user-stamp--disabled {
