@@ -365,43 +365,6 @@ body > #app {
   font-weight: 650;
 }
 
-.bind-group {
-  margin: 0 0 1.5rem;
-}
-
-.bind-group > h2 {
-  margin: 0 0 0.65rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--pico-muted-border-color, #e7eaef);
-  --pico-typography-spacing-top: 0;
-}
-
-.bind-row {
-  margin: 0 0 0.85rem;
-  padding: 0.75rem 0.85rem;
-  border: 1px solid var(--pico-muted-border-color, #eef1f5);
-  border-radius: 0.45rem;
-  background: #fcfcfd;
-}
-
-.bind-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem 1rem;
-  margin-bottom: 0.55rem;
-}
-
-.bind-head a {
-  font-size: 0.85rem;
-  text-decoration: none;
-}
-
-.bind-head a:hover {
-  text-decoration: underline;
-}
-
 details.advanced {
   margin: 0.5rem 0 1rem;
   padding: 0.65rem 0.85rem;
@@ -1366,6 +1329,253 @@ button[data-danger] {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--user-ink);
+}
+
+/* Integrations — provider binding board */
+.user-count .ov-bound-total {
+  font-size: 0.55em;
+  font-weight: 650;
+  color: #8a8490;
+}
+
+.ig-form {
+  margin: 0;
+}
+
+.ig-group {
+  margin: 0 0 1.35rem;
+}
+
+.ig-group__title {
+  margin: 0 0 0.55rem;
+  padding: 0.35rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5c6570;
+  background: #ebe8e0;
+  border: 1px solid var(--user-ink);
+  border-radius: 0.1rem;
+  --pico-typography-spacing-top: 0;
+}
+
+.ig-group__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ig-bind {
+  margin: 0;
+  padding: 0.85rem 0.95rem 0.95rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.15rem;
+  background:
+    linear-gradient(90deg, rgba(196, 92, 22, 0.06) 0, rgba(196, 92, 22, 0.06) 0.28rem, transparent 0.28rem),
+    #faf9f6;
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ig-bind { animation: none; }
+}
+
+.ig-bind__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.85rem;
+  margin-bottom: 0.7rem;
+}
+
+.ig-bind__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+  min-width: 0;
+}
+
+.ig-bind__title strong {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--user-ink);
+}
+
+.ig-bind__cred {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c6570;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.ig-bind__cred:hover {
+  color: var(--user-amber);
+  border-bottom-color: var(--user-amber);
+}
+
+.ig-bind__fields {
+  margin: 0;
+}
+
+.ig-bind .field {
+  margin-bottom: 0;
+}
+
+.ig-bind .field label {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.ig-bind input,
+.ig-bind select,
+.ig-bind textarea {
+  margin-bottom: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+  --pico-font-family: var(--admin-sans);
+}
+
+.ig-bind input:focus,
+.ig-bind select:focus,
+.ig-bind textarea:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.ig-bind .field--conn {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.ig-bind .field--settings {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.ig-bind .hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.ig-bind .choice-trigger {
+  width: 100% !important;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+}
+
+.ig-bind .field--conn,
+.ig-bind .field--settings {
+  width: 100%;
+}
+
+.ig-advanced {
+  margin: 0.25rem 0 1.15rem;
+  padding: 0.75rem 0.9rem 0.9rem;
+  border: 1.5px dashed var(--user-ink);
+  border-radius: 0.15rem;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 6px,
+      rgba(26, 31, 43, 0.03) 6px,
+      rgba(26, 31, 43, 0.03) 12px
+    ),
+    #faf9f6;
+}
+
+.ig-advanced summary {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c6570;
+  list-style: none;
+}
+
+.ig-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.ig-advanced[open] summary {
+  margin-bottom: 0.65rem;
+  color: var(--user-ink);
+}
+
+.ig-advanced textarea {
+  margin-bottom: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: var(--admin-mono);
+  font-size: 0.82rem;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+}
+
+.ig-advanced textarea:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.ig-actions {
+  margin: 0 0 1.5rem;
+}
+
+.ig-actions button[type="submit"] {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.95rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
 }
 
 /* Users — industrial ops casefile (roster + dossier) */

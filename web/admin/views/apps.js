@@ -278,18 +278,26 @@ export async function renderAppDetail(el, appID) {
 
 export async function renderAppConfig(el, appID) {
   el.innerHTML = `<div class="page-head"><h1>Integrations</h1><p class="muted">Loading…</p></div>`;
-  const cfg = await api("GET", "/apps/" + encodeURIComponent(appID) + "/config");
-  const connections = await api("GET", "/connections");
+  const [cfg, connections] = await Promise.all([
+    api("GET", "/apps/" + encodeURIComponent(appID) + "/config"),
+    api("GET", "/connections"),
+  ]);
   const byProvider = {};
   for (const c of connections.items || []) {
     (byProvider[c.provider] || (byProvider[c.provider] = [])).push(c);
   }
   const settingsJSON = JSON.stringify(cfg.settings || {}, null, 2);
+  const bound = PROVIDERS.filter((p) => {
+    const e = (cfg.integrations && cfg.integrations[p]) || {};
+    return !!e.connection_id;
+  }).length;
 
+  let reveal = 0;
   const groupsHTML = PROVIDER_GROUPS.map((g) => {
     const rows = g.providers.map((p) => {
       const cur = (cfg.integrations && cfg.integrations[p]) || {};
       const curID = cur.connection_id || "";
+      const isBound = !!curID;
       const list = byProvider[p] || [];
       const opts = [
         `<option value="">Not bound</option>`,
@@ -299,49 +307,67 @@ export async function renderAppConfig(el, appID) {
       ].join("");
       const bindSettings = cur.settings ? JSON.stringify(cur.settings) : "";
       const needsR2 = p === "r2";
+      const i = reveal++;
       return `
-        <div class="bind-row">
-          <div class="bind-head">
-            <strong>${esc(PROVIDER_LABELS[p] || p)}</strong>
-            <a class="muted" href="#/connections?provider=${encodeURIComponent(p)}">Manage credentials →</a>
+        <article class="ig-bind" data-reveal="${i}">
+          <div class="ig-bind__head">
+            <div class="ig-bind__title">
+              <strong>${esc(PROVIDER_LABELS[p] || p)}</strong>
+              ${bindStamp(isBound)}
+            </div>
+            <a class="ig-bind__cred" href="#/connections?provider=${encodeURIComponent(p)}">Credentials</a>
           </div>
-          <div class="form-row">
-            <div class="field">
+          <div class="form-row ig-bind__fields">
+            <div class="field field--conn">
               <label>Connection</label>
-              <select name="conn_${esc(p)}">${opts}</select>
+              <select name="conn_${esc(p)}" id="conn-${esc(p)}" class="ig-conn">${opts}</select>
               ${list.length === 0 ? `<p class="hint">No connections yet — create one under Platform → Connections.</p>` : ""}
             </div>
             ${needsR2 || bindSettings ? `
-            <div class="field">
+            <div class="field field--settings">
               <label>Binding settings JSON</label>
-              <input name="set_${esc(p)}" value="${esc(bindSettings)}" placeholder='{"key_prefix":"…"}'>
+              <input name="set_${esc(p)}" value="${esc(bindSettings)}" placeholder='{"key_prefix":"…"}' autocomplete="off">
             </div>` : `<input type="hidden" name="set_${esc(p)}" value="${esc(bindSettings)}">`}
           </div>
-        </div>`;
+        </article>`;
     }).join("");
-    return `<section class="bind-group">
-      <h2>${esc(g.label)}</h2>
-      ${rows}
+    return `<section class="ig-group" aria-label="${esc(g.label)}">
+      <h2 class="ig-group__title">${esc(g.label)}</h2>
+      <div class="ig-group__list">${rows}</div>
     </section>`;
   }).join("");
 
   el.innerHTML = `
-    <div class="page-head">
-      <h1>Integrations</h1>
-      <p class="muted">Bind platform connections to this app. Credentials live under Platform → Connections.</p>
+    <div class="page-head page-head-row user-page-head">
+      <div>
+        <p class="user-kicker">App · bindings</p>
+        <h1 class="user-page-title">Integrations</h1>
+        <p class="muted">Bind platform connections to this app. Credentials live under Platform → Connections.</p>
+      </div>
+      <div class="user-count" aria-label="Integrations bound">${bound}<span class="ov-bound-total">/${PROVIDERS.length}</span></div>
     </div>
-    <form id="put-config">
+
+    <form id="put-config" class="ig-form">
       ${groupsHTML}
-      <details class="advanced">
+
+      <details class="ig-advanced">
         <summary>Advanced app settings (JSON)</summary>
         <div class="field">
-          <textarea name="settings" rows="12">${esc(settingsJSON)}</textarea>
+          <textarea name="settings" rows="12" spellcheck="false">${esc(settingsJSON)}</textarea>
         </div>
       </details>
-      <div class="form-actions">
+
+      <div class="form-actions ig-actions">
         <button type="submit">Save integrations</button>
       </div>
     </form>`;
+
+  applyRevealDelays(el, ".ig-bind[data-reveal]");
+  el.querySelectorAll("select.ig-conn").forEach((sel) => {
+    const title = sel.closest(".ig-bind")?.querySelector(".ig-bind__title strong")?.textContent?.trim()
+      || "Connection";
+    wireMobileSelect(sel, { title });
+  });
 
   el.querySelector("#put-config").addEventListener("submit", async (ev) => {
     ev.preventDefault();
