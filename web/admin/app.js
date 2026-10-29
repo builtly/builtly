@@ -19,6 +19,7 @@ import { renderReferrals } from "./views/referrals.js";
 import { renderActivity } from "./views/activity.js";
 import { renderOutbox } from "./views/outbox.js";
 import { renderAudit } from "./views/audit.js";
+import { fetchSetupStatus, renderSetup } from "./views/setup.js";
 
 const root = document.getElementById("app");
 
@@ -428,7 +429,22 @@ async function route() {
   }
 }
 
-function boot() {
+async function boot() {
+  try {
+    const status = await fetchSetupStatus();
+    if (status.needs_setup || location.hash === "#/setup") {
+      await renderSetup(root, {
+        onConfigured: () => {
+          location.hash = "#/apps";
+          boot();
+        },
+      });
+      return;
+    }
+  } catch {
+    // status endpoint missing on older builds — fall through to login
+  }
+
   if (!getToken()) {
     renderLogin();
     return;
@@ -443,11 +459,17 @@ function boot() {
 }
 
 window.addEventListener("hashchange", () => {
+  if (location.hash === "#/setup") {
+    boot();
+    return;
+  }
   if (getToken()) route();
 });
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot);
+  document.addEventListener("DOMContentLoaded", () => {
+    boot();
+  });
 } else {
   boot();
 }

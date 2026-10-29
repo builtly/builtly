@@ -10,6 +10,11 @@ import (
 	"github.com/builtly/builtly/internal/platform/db"
 )
 
+// postgresTestLockKey serializes tests that share builtly_test across packages.
+// go test ./... runs packages in parallel; without this, concurrent
+// DROP SCHEMA CASCADE + MigrateUp races (e.g. "relation purchases does not exist").
+const postgresTestLockKey int64 = 872014401
+
 // New opens a fresh migrated database for driver ("postgres"|"sqlite").
 // For postgres, set BUILTLY_TEST_DATABASE_URL
 // (default postgres://builtly:builtly@127.0.0.1:5432/builtly_test?sslmode=disable).
@@ -28,14 +33,28 @@ func New(t *testing.T, driver string) *db.DB {
 	default:
 		t.Fatalf("dbtest: unsupported driver %q", driver)
 	}
-	database, err := db.Open(driver, dsn, 5)
+
+	// Postgres: single connection so advisory lock, DROP SCHEMA, and MigrateUp
+	// share one session (pool>1 can race within the same test handle).
+	maxOpen := 5
+	if driver == "postgres" {
+		maxOpen = 1
+	}
+	database, err := db.Open(driver, dsn, maxOpen)
 	if err != nil {
 		t.Fatalf("dbtest: open %s: %v", driver, err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
 
 	ctx := context.Background()
 	if driver == "postgres" {
+		if _, err := database.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, postgresTestLockKey); err != nil {
+			_ = database.Close()
+			t.Fatalf("dbtest: advisory lock: %v", err)
+		}
+		t.Cleanup(func() {
+			_, _ = database.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, postgresTestLockKey)
+			_ = database.Close()
+		})
 		if _, err := database.ExecContext(ctx, `
 			DROP SCHEMA public CASCADE;
 			CREATE SCHEMA public;
@@ -43,7 +62,10 @@ func New(t *testing.T, driver string) *db.DB {
 		`); err != nil {
 			t.Fatalf("dbtest: reset postgres: %v", err)
 		}
+	} else {
+		t.Cleanup(func() { _ = database.Close() })
 	}
+
 	if err := database.MigrateUp(ctx); err != nil {
 		t.Fatalf("dbtest: migrate %s: %v", driver, err)
 	}

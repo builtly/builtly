@@ -97,6 +97,12 @@ func (s *Server) buildRouter() chi.Router {
 
 	r.Get("/healthz", s.handleHealthz)
 	r.Get("/readyz", s.handleReadyz)
+	r.Get("/api/v1/setup/status", func(w http.ResponseWriter, _ *http.Request) {
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"needs_setup":    false,
+			"requires_token": false,
+		})
+	})
 
 	if s.cfg.AdminEnabled {
 		adminFS, err := fs.Sub(web.Admin, "admin")

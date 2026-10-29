@@ -93,7 +93,7 @@ func usersListWhere(appID uuid.UUID, query, status string) (where string, args [
 func (s *Store) Count(ctx context.Context, q db.Querier, appID uuid.UUID, query, status string) (int, error) {
 	where, args := usersListWhere(appID, query, status)
 	var n int
-	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM users `+where), args...)
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM users /* app_id */ `+where), args...)
 	if err != nil {
 		return 0, db.MapError(err)
 	}

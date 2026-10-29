@@ -34,6 +34,21 @@ type Config struct {
 	LogFormat       string
 	ShutdownTimeout time.Duration
 
+	// DataDir is where builtly.json and optional SQLite live.
+	DataDir string
+	// NeedsSetup is true when core config is incomplete or DB is unreachable.
+	NeedsSetup bool
+	// SetupReason is "unconfigured" or "db_unreachable".
+	SetupReason string
+	// SetupPreserveSecrets tells the wizard not to rotate JWT/encryption/admin keys.
+	SetupPreserveSecrets bool
+	// SetupDBError is the last DB ping/open error when SetupReason is db_unreachable.
+	SetupDBError string
+	// SetupToken authorizes setup API calls while NeedsSetup is true.
+	SetupToken string
+	// Persistent marks whether data-dir settings were loaded or written.
+	Persistent PersistentSettings
+
 	// DefaultConnections holds env-fallback provider credentials (nil groups = unset).
 	DefaultConnections DefaultConnections
 }
@@ -117,19 +132,31 @@ type APIKeyDefault struct {
 	APIKey string
 }
 
-// Load reads process env (after optional .env), validates, and returns Config.
+// Load reads process env (after optional .env + data-dir file), validates, and returns Config.
+// Precedence: process env > data-dir file > defaults.
+// Incomplete public_url / database / secrets → NeedsSetup (wizard). Callers should also
+// ping the DB; on failure use MarkDBUnreachable to re-enter setup without rotating secrets.
 func Load() (*Config, error) {
 	envFile := getenv("BUILTLY_ENV_FILE", "./.env")
 	if err := loadDotEnv(envFile); err != nil {
 		return nil, err
 	}
 
+	dataDir := DataDir()
+	persisted, err := LoadPersistent(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := applyPersistentToEnv(persisted); err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Env:             getenv("BUILTLY_ENV", "development"),
 		HTTPAddr:        getenv("BUILTLY_HTTP_ADDR", ":8080"),
-		PublicURL:       os.Getenv("BUILTLY_PUBLIC_URL"),
-		DBDriver:        getenv("BUILTLY_DB_DRIVER", "sqlite"),
-		DBDSN:           getenv("BUILTLY_DB_DSN", "file:builtly.db"),
+		PublicURL:       strings.TrimRight(strings.TrimSpace(os.Getenv("BUILTLY_PUBLIC_URL")), "/"),
+		DBDriver:        strings.ToLower(strings.TrimSpace(os.Getenv("BUILTLY_DB_DRIVER"))),
+		DBDSN:           strings.TrimSpace(os.Getenv("BUILTLY_DB_DSN")),
 		DBMaxOpenConns:  getenvInt("BUILTLY_DB_MAX_OPEN_CONNS", 20),
 		AutoMigrate:     getenvBool("BUILTLY_AUTO_MIGRATE", false),
 		JWTAccessTTL:    getenvDuration("BUILTLY_JWT_ACCESS_TTL", 15*time.Minute),
@@ -141,6 +168,8 @@ func Load() (*Config, error) {
 		LogLevel:        getenv("BUILTLY_LOG_LEVEL", "info"),
 		LogFormat:       getenv("BUILTLY_LOG_FORMAT", "json"),
 		ShutdownTimeout: getenvDuration("BUILTLY_SHUTDOWN_TIMEOUT", 15*time.Second),
+		DataDir:         dataDir,
+		Persistent:      persisted,
 	}
 
 	switch cfg.Env {
@@ -148,25 +177,32 @@ func Load() (*Config, error) {
 	default:
 		return nil, fmt.Errorf("BUILTLY_ENV must be development or production")
 	}
-	if cfg.Env == "production" {
-		if cfg.PublicURL == "" {
-			return nil, fmt.Errorf("BUILTLY_PUBLIC_URL is required in production")
-		}
-		if cfg.LogFormat == "text" {
-			return nil, fmt.Errorf("BUILTLY_LOG_FORMAT=text is forbidden in production")
-		}
+
+	missingSecrets := os.Getenv("BUILTLY_JWT_SIGNING_KEYS") == "" ||
+		os.Getenv("BUILTLY_ENCRYPTION_KEYS") == "" ||
+		(cfg.AdminEnabled && len(cfg.AdminToken) < 32)
+	missingCore := cfg.PublicURL == "" || cfg.DBDriver == "" || cfg.DBDSN == ""
+
+	if missingCore || missingSecrets {
+		return cfg.enterSetup("unconfigured", false, ""), nil
+	}
+
+	if cfg.Env == "production" && cfg.LogFormat == "text" {
+		return nil, fmt.Errorf("BUILTLY_LOG_FORMAT=text is forbidden in production")
 	}
 
 	switch cfg.DBDriver {
-	case "postgres", "sqlite":
+	case "postgres", "postgresql", "sqlite", "libsql", "turso":
+		if cfg.DBDriver == "postgresql" {
+			cfg.DBDriver = "postgres"
+		}
+		if cfg.DBDriver == "turso" {
+			cfg.DBDriver = "libsql"
+		}
 	default:
-		return nil, fmt.Errorf("BUILTLY_DB_DRIVER must be postgres or sqlite")
-	}
-	if cfg.DBDSN == "" {
-		return nil, fmt.Errorf("BUILTLY_DB_DSN is required")
+		return nil, fmt.Errorf("BUILTLY_DB_DRIVER must be postgres, sqlite, or libsql")
 	}
 
-	var err error
 	cfg.JWTSigningKeys, err = parseKeyList("BUILTLY_JWT_SIGNING_KEYS", os.Getenv("BUILTLY_JWT_SIGNING_KEYS"), 32)
 	if err != nil {
 		return nil, err
@@ -194,6 +230,44 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// MarkDBUnreachable switches a fully loaded config into setup mode after a failed DB open/ping.
+// Existing secrets are preserved so a temporary outage cannot rotate keys.
+func (c *Config) MarkDBUnreachable(err error) {
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+	_ = c.enterSetup("db_unreachable", true, msg)
+}
+
+func (c *Config) enterSetup(reason string, preserveSecrets bool, dbErr string) *Config {
+	c.NeedsSetup = true
+	c.SetupReason = reason
+	c.SetupPreserveSecrets = preserveSecrets
+	c.SetupDBError = dbErr
+	c.SetupToken = strings.TrimSpace(os.Getenv("BUILTLY_SETUP_TOKEN"))
+	if c.SetupToken == "" {
+		if tok, err := GenerateAdminToken(); err == nil {
+			c.SetupToken = tok
+		}
+	}
+	if c.LogFormat == "" {
+		c.LogFormat = "json"
+	}
+	return c
+}
+
+// HasSecrets reports whether JWT, encryption, and admin credentials are present in env/config.
+func (c *Config) HasSecrets() bool {
+	if os.Getenv("BUILTLY_JWT_SIGNING_KEYS") == "" || os.Getenv("BUILTLY_ENCRYPTION_KEYS") == "" {
+		return false
+	}
+	if c.AdminEnabled && len(c.AdminToken) < 32 {
+		return false
+	}
+	return true
 }
 
 func (c *Config) loadDefaultConnections() error {

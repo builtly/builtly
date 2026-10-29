@@ -166,7 +166,7 @@ func referralAdminWhere(appID uuid.UUID, referrerID *uuid.UUID, status string) (
 func (s *Store) CountAdmin(ctx context.Context, q db.Querier, appID uuid.UUID, referrerID *uuid.UUID, status string) (int, error) {
 	where, args := referralAdminWhere(appID, referrerID, status)
 	var n int
-	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM referrals `+where), args...)
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM referrals /* app_id */ `+where), args...)
 	if err != nil {
 		return 0, db.MapError(err)
 	}

@@ -176,7 +176,7 @@ const selectAppLedger = `
 func (s *Store) CountAppEntries(ctx context.Context, q db.Querier, appID uuid.UUID, f AppLedgerQuery) (int, error) {
 	where, args := appLedgerWhere(appID, f)
 	var n int
-	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM credit_ledger `+where), args...)
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM credit_ledger /* app_id */ `+where), args...)
 	if err != nil {
 		return 0, db.MapError(err)
 	}

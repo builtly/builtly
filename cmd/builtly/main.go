@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +36,7 @@ import (
 	"github.com/builtly/builtly/internal/platform/secrets"
 	"github.com/builtly/builtly/internal/referral"
 	"github.com/builtly/builtly/internal/server"
+	"github.com/builtly/builtly/internal/setup"
 	"github.com/builtly/builtly/internal/storage"
 	"github.com/builtly/builtly/internal/tenant"
 	"github.com/builtly/builtly/internal/version"
@@ -89,13 +92,57 @@ func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	_ = fs.Parse(args)
 
-	cfg, err := load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
-		return 1
-	}
-	log := logx.Setup(cfg.LogLevel, cfg.LogFormat)
+	runCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
+	for {
+		cfg, err := load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v\n", err)
+			return 1
+		}
+		log := logx.Setup(cfg.LogLevel, cfg.LogFormat)
+
+		if !cfg.NeedsSetup {
+			if probe, err := openDB(cfg); err != nil {
+				log.Warn("database unreachable; entering setup", "err", err)
+				cfg.MarkDBUnreachable(err)
+			} else {
+				_ = probe.Close()
+			}
+		}
+
+		if cfg.NeedsSetup {
+			done := make(chan struct{})
+			var once sync.Once
+			setupCtx, cancelSetup := context.WithCancel(runCtx)
+			go func() {
+				select {
+				case <-done:
+					cancelSetup()
+				case <-setupCtx.Done():
+				}
+			}()
+			err := setup.Run(setupCtx, cfg, log, func() {
+				once.Do(func() { close(done) })
+			})
+			cancelSetup()
+			if err != nil {
+				log.Error("setup server stopped with error", "err", err)
+				return 1
+			}
+			if runCtx.Err() != nil {
+				return 0
+			}
+			log.Info("setup complete; starting application")
+			continue
+		}
+
+		return runApp(runCtx, cfg, log)
+	}
+}
+
+func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	database, err := openDB(cfg)
 	if err != nil {
 		log.Error("db open failed", "err", err)
@@ -221,8 +268,6 @@ func runServe(args []string) int {
 		StorageCleaner:   storage.NewCleaner(storageSvc, log),
 		Referral:         referral.NewHandler(referralSvc),
 	})
-	runCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	if err := srv.Run(runCtx); err != nil {
 		log.Error("server stopped with error", "err", err)
 		return 1

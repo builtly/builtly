@@ -13,28 +13,29 @@ Client (Jekyll / static site): [`docs/client-jekyll.md`](docs/client-jekyll.md) 
 ## Quick start
 
 ```bash
-cp .env.example .env
-go run ./cmd/builtly migrate up
+cp .env.example .env   # leave PUBLIC_URL / DB / secrets empty to hit the setup wizard
 go run ./cmd/builtly serve
 ```
 
 - Health: `GET http://localhost:8080/healthz`
-- Admin UI: `http://localhost:8080/admin/` (paste `BUILTLY_ADMIN_TOKEN` from `.env`; Pico.css + Alpine.js CSP, vendored & `go:embed`)
+- Admin UI: `http://localhost:8080/admin/#/setup` on first boot (token in logs / `BUILTLY_SETUP_TOKEN`)
 - API base: `http://localhost:8080/api/v1` with `X-App-ID` + user JWT or `bk_…` API key
 
-Or with Docker Compose (Postgres):
+Config order: **process env → data-dir `builtly.json` → defaults**. After load, Builtly pings the DB; success → serve, failure → setup (prefilled, secrets preserved).
+
+Databases in the wizard: **SQLite local** (single node), **SQLite cloud / Turso (libSQL)** (multi-node OK), **Postgres** (Neon / Supabase / self-hosted). Multi-node: use the wizard’s Copy env / Download `builtly.json` into platform Secrets on every machine.
 
 ```bash
-docker compose up --build
-# API http://localhost:8080  ·  Admin http://localhost:8080/admin/
-docker compose run --rm test   # go test -race ./...
+docker compose up --build postgres builtly
+# API http://localhost:8080  ·  Admin http://localhost:8080/admin/#/setup
+docker compose --profile test run --rm test
 ```
 
 ### First admin steps
 
-1. Open `/admin/`, enter the admin token.
+1. Open `/admin/` (setup wizard if unconfigured; otherwise paste the admin token).
 2. Create an **app** (slug, allowed origins, signup bonus / referral settings as needed).
-3. Create **connections** (Stripe, Resend, R2, OAuth, IAP, PostHog, …) or rely on env defaults from `.env.example`.
+3. Create **connections** (Stripe, Resend, R2, OAuth, IAP, PostHog, …) or rely on env defaults.
 4. Bind connections under the app **config**; create products and API keys.
 5. Register a user against the app (`POST /api/v1/auth/register` with `X-App-ID`).
 

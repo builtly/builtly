@@ -31,7 +31,7 @@ func NewService(database *db.DB, store *Store, box *secrets.Box, env *EnvDefault
 		box:       box,
 		env:       env,
 		resolver:  resolver,
-		publicURL: strings.TrimRight(publicURL, "/"),
+		publicURL: strings.TrimRight(strings.TrimSpace(publicURL), "/"),
 		db:        database,
 	}
 }

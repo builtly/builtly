@@ -1213,6 +1213,44 @@ input[type="reset"],
   justify-content: flex-end;
 }
 
+.conn-copyable {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 22rem;
+}
+
+.conn-copyable__url {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #5c6570;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conn-drawer .conn-copyable,
+.conn-empty .conn-copyable {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.conn-drawer .conn-copyable__url,
+.conn-empty .conn-copyable__url {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-all;
+}
+
 .conn-edit,
 .conn-del,
 .conn-copy {
@@ -1234,6 +1272,7 @@ input[type="reset"],
   text-transform: uppercase;
   line-height: 1;
   box-shadow: none;
+  flex: 0 0 auto;
   --pico-background-color: transparent;
   --pico-border-color: var(--user-ink);
   --pico-color: var(--user-ink);
@@ -1728,6 +1767,138 @@ button[data-danger] {
   .login-form__submit:active {
     transform: none;
   }
+}
+
+/* Setup wizard — same chrome as login, slightly wider for DB options */
+.login-panel.setup-panel {
+  width: min(100%, 32rem);
+}
+
+.setup-form .setup-hint,
+.setup-fieldset > .setup-hint,
+#dsn-field .setup-hint {
+  margin: -0.35rem 0 0.85rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #5c6570;
+}
+
+.setup-form .setup-hint code,
+.setup-fieldset .setup-hint code {
+  font-family: var(--admin-mono);
+  font-size: 0.86em;
+  padding: 0.05rem 0.28rem;
+  border: 1px solid var(--user-rule);
+  border-radius: 0.1rem;
+  background: var(--user-paper);
+  color: var(--user-ink);
+  word-break: break-all;
+}
+
+.setup-fieldset {
+  margin: 0.25rem 0 1rem;
+  padding: 0.75rem 0 0;
+  border: none;
+  border-top: 1.5px solid var(--user-rule, #d4d0c6);
+}
+
+.setup-fieldset legend {
+  padding: 0;
+  margin: 0 0 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5c6570;
+}
+
+.setup-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--user-ink);
+  cursor: pointer;
+}
+
+.setup-choice input {
+  margin: 0.15rem 0 0;
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+  accent-color: var(--user-ink);
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin: 0.35rem 0 0;
+}
+
+.setup-actions .login-github,
+.setup-actions .login-form__submit {
+  box-sizing: border-box;
+  min-height: 2.55rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.setup-actions--start {
+  justify-content: flex-start;
+  margin: 0 0 0.85rem;
+}
+
+.setup-done .banner {
+  margin: 0 0 1rem;
+}
+
+.setup-copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.85rem;
+  min-width: 0;
+}
+
+.setup-admin-token {
+  display: block;
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-paper);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.setup-env {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  max-height: 12rem;
+  overflow: auto;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-paper);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.setup-done .login-form__submit {
+  margin-top: 0.25rem;
 }
 
 .table-wrap {

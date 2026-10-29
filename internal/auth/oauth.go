@@ -101,7 +101,7 @@ func (s *Service) StartOAuth(ctx context.Context, providerName string, appID uui
 	if err := s.store.InsertOAuthFlow(ctx, nil, flow); err != nil {
 		return "", err
 	}
-	callback := strings.TrimRight(s.oauth.PublicURL, "/") + "/api/v1/auth/oauth/" + providerName + "/callback"
+	callback := integration.OAuthRedirectURL(s.oauth.PublicURL, provider.IntegrationProvider(providerName))
 	return web.AuthCodeURL(cfg, state, nonce, provVerifier, callback), nil
 }
 
@@ -147,7 +147,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 	if err != nil {
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
-	callback := strings.TrimRight(s.oauth.PublicURL, "/") + "/api/v1/auth/oauth/" + providerName + "/callback"
+	callback := integration.OAuthRedirectURL(s.oauth.PublicURL, provider.IntegrationProvider(providerName))
 	ident, err := web.Exchange(ctx, cfg, code, string(provVerifier), flow.Nonce, callback)
 	if err != nil {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)

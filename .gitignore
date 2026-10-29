@@ -33,6 +33,7 @@ go.work.sum
 *.db-*
 /builtly
 /bin/
+/data/
 
 # Editor/IDE
 .idea/

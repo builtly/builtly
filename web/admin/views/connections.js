@@ -138,10 +138,18 @@ const PROVIDERS = PROVIDER_GROUPS.flatMap((g) => g.providers);
 
 /** OAuth providers register one callback derived from BUILTLY_PUBLIC_URL. */
 const REDIRECT_PROVIDERS = new Set(["google_oauth", "github_oauth", "apple_signin"]);
+const MISSING_PUBLIC_URL = "Set BUILTLY_PUBLIC_URL to show the OAuth callback URL.";
 
-function copyButton(url, copied) {
-  if (!url) return `<span class="user-empty">—</span>`;
-  return `<button type="button" class="conn-copy copy-url" data-url="${esc(url)}" data-copied="${esc(copied)}" title="${esc(url)}">Copy</button>`;
+function copyableURL(url, copied, { missing = "" } = {}) {
+  if (!url) {
+    return missing
+      ? `<p class="hint">${esc(missing)}</p>`
+      : `<span class="user-empty">—</span>`;
+  }
+  return `<div class="conn-copyable">
+    <code class="conn-copyable__url mono" title="${esc(url)}">${esc(url)}</code>
+    <button type="button" class="conn-copy copy-url" data-url="${esc(url)}" data-copied="${esc(copied)}">Copy</button>
+  </div>`;
 }
 
 function linesToArray(raw) {
@@ -317,7 +325,7 @@ function providerNav(active) {
   </div>`;
 }
 
-function formMarkup(schema, { mode, values, redirectURL }) {
+function formMarkup(schema, { mode, values, redirectURL, wantRedirect }) {
   const forEdit = mode === "edit";
   let st = values || {};
   if (schema === SCHEMAS.google_oauth) st = normalizeGoogleSettings(st);
@@ -357,10 +365,11 @@ function formMarkup(schema, { mode, values, redirectURL }) {
     }
   }
 
-  const redirect = redirectURL
+  const redirect = wantRedirect
     ? `<div class="field">
         <label>Redirect URL</label>
-        ${copyButton(redirectURL, "Redirect URL")}
+        ${copyableURL(redirectURL, "Redirect URL", { missing: MISSING_PUBLIC_URL })}
+        <p class="hint">Register this Builtly callback in the provider console. Same for every app.</p>
       </div>`
     : "";
 
@@ -450,7 +459,9 @@ export async function renderConnections(el) {
           <button type="button" class="conn-del del-conn" data-id="${esc(c.id)}">Delete</button>
         </div>`;
     const linkURL = showRedirect ? (c.redirect_url || redirectURL) : c.webhook_url;
-    const webhook = copyButton(linkURL, copiedLabel);
+    const webhook = copyableURL(linkURL, copiedLabel, {
+      missing: showRedirect ? MISSING_PUBLIC_URL : "",
+    });
     return `<tr class="conn-row" data-conn-id="${esc(c.id)}" data-reveal="${i}">
       <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
       <td>
@@ -501,14 +512,14 @@ export async function renderConnections(el) {
         </div>`
       : `<div class="conn-empty">
           <p>No ${esc(schema.label)} connections yet.</p>
-          ${showRedirect && redirectURL ? `<p>${copyButton(redirectURL, copiedLabel)}</p>` : ""}
+          ${showRedirect ? copyableURL(redirectURL, copiedLabel, { missing: MISSING_PUBLIC_URL }) : ""}
           <button type="button" class="conn-create" id="conn-add-empty">Add the first one</button>
         </div>`}`;
 
   applyRevealDelays(el, ".conn-row[data-reveal]");
 
   const openCreate = () => {
-    openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {}, redirectURL: showRedirect ? redirectURL : "" })}</form>`);
+    openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {}, redirectURL, wantRedirect: showRedirect })}</form>`);
     el.querySelector("#create-conn").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const { name, settings, secrets } = collectPayload(ev.target, schema, { requireSecrets: true });
@@ -527,7 +538,7 @@ export async function renderConnections(el) {
       openDrawer(
         el,
         `Edit ${c.name}`,
-        `<form id="edit-conn">${formMarkup(schema, { mode: "edit", values: { name: c.name, ...(c.settings || {}) }, redirectURL: showRedirect ? (c.redirect_url || redirectURL) : "" })}</form>`,
+        `<form id="edit-conn">${formMarkup(schema, { mode: "edit", values: { name: c.name, ...(c.settings || {}) }, redirectURL: c.redirect_url || redirectURL, wantRedirect: showRedirect })}</form>`,
       );
       el.querySelector("#edit-conn").addEventListener("submit", async (ev) => {
         ev.preventDefault();

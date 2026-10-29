@@ -5,17 +5,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // postgres
-	_ "modernc.org/sqlite"             // sqlite
+	_ "github.com/jackc/pgx/v5/stdlib"                   // postgres
+	_ "github.com/tursodatabase/libsql-client-go/libsql" // turso / libsql
+	_ "modernc.org/sqlite"                               // local sqlite
 )
 
 // DB is the process-wide database handle.
 type DB struct {
 	*sqlx.DB
+	// Driver is the SQL dialect used for migrations and binds: "postgres" or "sqlite".
 	Driver string
 }
 
@@ -28,19 +31,42 @@ type Querier interface {
 	Rebind(query string) string
 }
 
-// Open opens and pings a database for the given driver ("postgres"|"sqlite").
+// Dialect returns the migration/bind dialect for a configured driver name.
+func Dialect(driver string) string {
+	switch strings.ToLower(strings.TrimSpace(driver)) {
+	case "postgres", "postgresql":
+		return "postgres"
+	case "sqlite", "libsql", "turso":
+		return "sqlite"
+	default:
+		return ""
+	}
+}
+
+// Open opens and pings a database for the given driver.
+// Supported: postgres | sqlite (local file) | libsql/turso (remote SQLite SaaS).
 func Open(driver, dsn string, maxOpen int) (*DB, error) {
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	dsn = strings.TrimSpace(dsn)
+
 	var (
 		sqlDriver string
 		dsnFinal  string
+		dialect   string
 	)
 	switch driver {
-	case "postgres":
+	case "postgres", "postgresql":
 		sqlDriver = "pgx"
 		dsnFinal = dsn
+		dialect = "postgres"
 	case "sqlite":
 		sqlDriver = "sqlite"
 		dsnFinal = withSQLitePragmas(dsn)
+		dialect = "sqlite"
+	case "libsql", "turso":
+		sqlDriver = "libsql"
+		dsnFinal = dsn
+		dialect = "sqlite"
 	default:
 		return nil, fmt.Errorf("db: unsupported driver %q", driver)
 	}
@@ -49,8 +75,13 @@ func Open(driver, dsn string, maxOpen int) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db: open: %w", err)
 	}
-	x := sqlx.NewDb(sqldb, sqlDriver)
-	if driver == "sqlite" {
+	// sqlx binder: use sqlite for libsql (? placeholders).
+	bindName := sqlDriver
+	if dialect == "sqlite" {
+		bindName = "sqlite"
+	}
+	x := sqlx.NewDb(sqldb, bindName)
+	if dialect == "sqlite" && driver == "sqlite" {
 		x.SetMaxOpenConns(1)
 	} else {
 		if maxOpen <= 0 {
@@ -60,13 +91,13 @@ func Open(driver, dsn string, maxOpen int) (*DB, error) {
 		x.SetMaxIdleConns(maxOpen / 2)
 		x.SetConnMaxLifetime(30 * time.Minute)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if err := x.PingContext(ctx); err != nil {
 		_ = x.Close()
 		return nil, fmt.Errorf("db: ping: %w", err)
 	}
-	return &DB{DB: x, Driver: driver}, nil
+	return &DB{DB: x, Driver: dialect}, nil
 }
 
 func withSQLitePragmas(dsn string) string {

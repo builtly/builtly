@@ -11,10 +11,14 @@ RUN go build -trimpath -ldflags="-s -w -X github.com/builtly/builtly/internal/ve
 	-o /out/builtly ./cmd/builtly
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates tzdata \
-	&& adduser -D -H -u 65532 nonroot
+RUN apk add --no-cache ca-certificates tzdata su-exec \
+	&& adduser -D -H -u 65532 nonroot \
+	&& mkdir -p /data \
+	&& chown nonroot:nonroot /data
 COPY --from=build /out/builtly /builtly
-USER nonroot
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 EXPOSE 8080
-ENTRYPOINT ["/builtly"]
+# Entrypoint runs as root only long enough to chown the data volume, then drops to nonroot.
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["serve"]

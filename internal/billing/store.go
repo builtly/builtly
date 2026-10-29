@@ -147,7 +147,7 @@ func purchaseListWhere(appID uuid.UUID, f PurchaseListQuery) (string, []any) {
 func (s *Store) CountAppPurchases(ctx context.Context, q db.Querier, appID uuid.UUID, f PurchaseListQuery) (int, error) {
 	where, args := purchaseListWhere(appID, f)
 	var n int
-	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM purchases `+where), args...)
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM purchases /* app_id */ `+where), args...)
 	if err != nil {
 		return 0, db.MapError(err)
 	}
