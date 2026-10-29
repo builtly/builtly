@@ -8,6 +8,7 @@ import {
   setAppsCache,
   setCurrentAppID,
 } from "./context.js";
+import { closeChoiceSheet, openAppSwitcher, syncChromeLock } from "./choice-sheet.js";
 import { renderAppsList, renderAppDetail, renderAppConfig } from "./views/apps.js";
 import { renderConnections } from "./views/connections.js";
 import { renderKeys } from "./views/keys.js";
@@ -97,16 +98,6 @@ function shellHTML(parts, apps) {
     `;
 
   const appSlug = current ? current.slug : "";
-  const appPickerItems = apps.length
-    ? apps.map((a) => {
-      const on = current && a.id === current.id;
-      return `<button type="button" class="app-picker__item${on ? " app-picker__item--current" : ""}"
-          data-app-id="${esc(a.id)}" role="option" aria-selected="${on ? "true" : "false"}">
-          <span class="app-picker__name">${esc(a.name)}</span>
-          <span class="app-picker__slug">${esc(a.slug)}</span>
-        </button>`;
-    }).join("")
-    : `<p class="nav-hint">Create an app from All apps to get started.</p>`;
 
   return `
     <header class="mobile-bar">
@@ -118,7 +109,7 @@ function shellHTML(parts, apps) {
         Builtly <span class="mobile-bar__mark">admin</span>
       </div>
       ${appSlug
-        ? `<button type="button" class="mobile-bar__app" id="mobile-app-chip" aria-haspopup="dialog" aria-controls="app-sheet" aria-expanded="false">${esc(appSlug)}</button>`
+        ? `<button type="button" class="mobile-bar__app" id="mobile-app-chip" aria-haspopup="dialog" aria-controls="choice-sheet" aria-expanded="false">${esc(appSlug)}</button>`
         : `<span class="mobile-bar__app mobile-bar__app--empty"></span>`}
     </header>
     <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
@@ -146,17 +137,6 @@ function shellHTML(parts, apps) {
       </div>
       <button type="button" class="logout" id="logout-btn">Log out</button>
     </aside>
-    <div class="app-sheet-backdrop" id="app-sheet-backdrop" hidden></div>
-    <div class="app-sheet" id="app-sheet" role="dialog" aria-modal="true" aria-labelledby="app-sheet-title" hidden>
-      <div class="app-sheet__head">
-        <h2 class="app-sheet__title" id="app-sheet-title">Switch app</h2>
-        <button type="button" class="app-sheet__close" id="app-sheet-close" aria-label="Close">✕</button>
-      </div>
-      <div class="app-picker app-picker--sheet" role="listbox" aria-label="Apps">
-        <div class="app-picker__list">${appPickerItems}</div>
-      </div>
-      <a class="app-sheet__all" href="#/apps">Manage all apps</a>
-    </div>
     <div class="main">
       <p id="banner" class="banner" role="status" hidden></p>
       <div id="view"></div>
@@ -173,6 +153,7 @@ function teardownChrome() {
     sidebarAbort.abort();
     sidebarAbort = null;
   }
+  closeChoiceSheet();
   document.documentElement.classList.remove("nav-lock");
 }
 
@@ -196,26 +177,17 @@ function setSidebarInert(sidebar, inert) {
   else sidebar.removeAttribute("aria-hidden");
 }
 
-function wireChrome(layout, parts) {
+function wireChrome(layout, parts, apps) {
   const sidebar = document.getElementById("sidebar");
   const openBtn = document.getElementById("sidebar-open");
   const closeBtn = document.getElementById("sidebar-close");
   const navBackdrop = document.getElementById("sidebar-backdrop");
   const appChip = document.getElementById("mobile-app-chip");
-  const appSheet = document.getElementById("app-sheet");
-  const appSheetBackdrop = document.getElementById("app-sheet-backdrop");
-  const appSheetClose = document.getElementById("app-sheet-close");
-  if (!layout || !sidebar || !openBtn || !closeBtn || !navBackdrop || !appSheet || !appSheetBackdrop) return;
+  if (!layout || !sidebar || !openBtn || !closeBtn || !navBackdrop) return;
 
   if (sidebarAbort) sidebarAbort.abort();
   sidebarAbort = new AbortController();
   const { signal } = sidebarAbort;
-
-  const syncLock = () => {
-    const locked = layout.classList.contains("layout--nav-open")
-      || layout.classList.contains("layout--app-sheet-open");
-    document.documentElement.classList.toggle("nav-lock", locked);
-  };
 
   const syncSidebarA11y = () => {
     // Off-canvas only on mobile; desktop sidebar stays interactive.
@@ -227,37 +199,17 @@ function wireChrome(layout, parts) {
     layout.classList.toggle("layout--nav-open", open);
     openBtn.setAttribute("aria-expanded", open ? "true" : "false");
     navBackdrop.hidden = !open;
-    if (open) {
-      layout.classList.remove("layout--app-sheet-open");
-      appSheet.hidden = true;
-      appSheetBackdrop.hidden = true;
-      appChip?.setAttribute("aria-expanded", "false");
-    }
+    if (open) closeChoiceSheet();
     syncSidebarA11y();
-    syncLock();
-  };
-
-  const setAppSheetOpen = (open) => {
-    layout.classList.toggle("layout--app-sheet-open", open);
-    appSheet.hidden = !open;
-    appSheetBackdrop.hidden = !open;
-    appChip?.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) {
-      layout.classList.remove("layout--nav-open");
-      openBtn.setAttribute("aria-expanded", "false");
-      navBackdrop.hidden = true;
-    }
-    syncSidebarA11y();
-    syncLock();
+    syncChromeLock();
   };
 
   const closeOverlays = () => {
-    setAppSheetOpen(false);
+    closeChoiceSheet();
     setNavOpen(false);
   };
 
   setNavOpen(false);
-  setAppSheetOpen(false);
 
   openBtn.addEventListener("click", () => setNavOpen(true), { signal });
   closeBtn.addEventListener("click", () => setNavOpen(false), { signal });
@@ -266,22 +218,18 @@ function wireChrome(layout, parts) {
     a.addEventListener("click", () => setNavOpen(false), { signal });
   });
 
-  appChip?.addEventListener("click", () => setAppSheetOpen(true), { signal });
-  appSheetClose?.addEventListener("click", () => setAppSheetOpen(false), { signal });
-  appSheetBackdrop.addEventListener("click", () => setAppSheetOpen(false), { signal });
-  appSheet.querySelector(".app-sheet__all")?.addEventListener("click", () => setAppSheetOpen(false), { signal });
-
-  layout.querySelectorAll(".app-picker__item[data-app-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-app-id") || "";
-      closeOverlays();
-      switchApp(parts, id);
-    }, { signal });
-  });
+  appChip?.addEventListener("click", () => {
+    const currentID = getCurrentAppID() || "";
+    openAppSwitcher({
+      apps,
+      currentID,
+      onSelect: (id) => switchApp(parts, id),
+    });
+  }, { signal });
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
-    if (layout.classList.contains("layout--app-sheet-open")) setAppSheetOpen(false);
+    if (layout.classList.contains("layout--choice-sheet-open")) closeChoiceSheet();
     else if (layout.classList.contains("layout--nav-open")) setNavOpen(false);
   }, { signal });
 
@@ -305,7 +253,7 @@ async function renderShell(parts) {
   bannerEl = document.getElementById("banner");
   mainEl = document.getElementById("view");
   const layout = root.querySelector(".layout");
-  wireChrome(layout, parts);
+  wireChrome(layout, parts, apps);
 
   document.getElementById("logout-btn").addEventListener("click", () => {
     teardownChrome();

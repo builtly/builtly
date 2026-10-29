@@ -1,4 +1,5 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
+import { wireMobileSelect } from "../choice-sheet.js";
 import { clearAppsCache, setCurrentAppID } from "../context.js";
 
 const PROVIDER_GROUPS = [
@@ -29,6 +30,43 @@ const PROVIDER_LABELS = {
 function appStatusStamp(status) {
   const s = status || "unknown";
   return `<span class="user-stamp user-stamp--${esc(s === "suspended" ? "disabled" : s)}">${esc(s)}</span>`;
+}
+
+function shortRef(id) {
+  if (!id) return "—";
+  return id.length > 10 ? id.slice(0, 8) : id;
+}
+
+function appInitials(name, slug) {
+  const src = (name || slug || "?").trim();
+  if (!src) return "?";
+  const parts = src.split(/[\s-_]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
+
+function bindStamp(bound) {
+  return bound
+    ? `<span class="user-stamp user-stamp--active">bound</span>`
+    : `<span class="user-stamp user-stamp--unknown">unbound</span>`;
+}
+
+function connectionLink(provider, connectionID, byID) {
+  if (!connectionID) return `<span class="user-empty">—</span>`;
+  const isDefault = connectionID === "default";
+  const conn = byID.get(connectionID);
+  const label = isDefault ? "Env default" : (conn?.name || shortRef(connectionID));
+  let href = "#/connections?provider=" + encodeURIComponent(provider);
+  if (!isDefault) href += "&edit=" + encodeURIComponent(connectionID);
+  return `<a class="ov-bind-link" href="${href}" title="${esc(connectionID)}">${esc(label)}</a>`;
+}
+
+/** Set stagger delays via CSSOM — HTML style="" is blocked by admin CSP style-src. */
+function applyRevealDelays(root, selector) {
+  root.querySelectorAll(selector).forEach((node) => {
+    const n = Number(node.getAttribute("data-reveal") || "0");
+    if (Number.isFinite(n)) node.style.setProperty("--reveal", String(n));
+  });
 }
 
 export async function renderAppsList(el) {
@@ -88,10 +126,7 @@ export async function renderAppsList(el) {
       </table>
     </div>`;
 
-  el.querySelectorAll(".apps-row[data-reveal]").forEach((row) => {
-    const n = Number(row.getAttribute("data-reveal") || "0");
-    if (Number.isFinite(n)) row.style.setProperty("--reveal", String(n));
-  });
+  applyRevealDelays(el, ".apps-row[data-reveal]");
 
   el.querySelector("#create-app").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -110,58 +145,124 @@ export async function renderAppsList(el) {
 
 export async function renderAppDetail(el, appID) {
   el.innerHTML = `<div class="page-head"><h1>Overview</h1><p class="muted">Loading…</p></div>`;
-  const app = await api("GET", "/apps/" + encodeURIComponent(appID));
-  const cfg = await api("GET", "/apps/" + encodeURIComponent(appID) + "/config");
+  const [app, cfg, connections] = await Promise.all([
+    api("GET", "/apps/" + encodeURIComponent(appID)),
+    api("GET", "/apps/" + encodeURIComponent(appID) + "/config"),
+    api("GET", "/connections"),
+  ]);
   const integ = cfg.integrations || {};
+  const byID = new Map((connections.items || []).map((c) => [c.id, c]));
   const bound = PROVIDERS.filter((p) => integ[p] && integ[p].connection_id).length;
+  const mark = appInitials(app.name, app.slug);
+
+  let reveal = 0;
+  const bindRows = PROVIDER_GROUPS.map((g) => {
+    const group = `<tr class="ov-group-row"><td colspan="3">${esc(g.label)}</td></tr>`;
+    const rows = g.providers.map((p) => {
+      const e = integ[p] || {};
+      const isBound = !!(e.connection_id);
+      const i = reveal++;
+      return `<tr class="ov-bind-row" data-reveal="${i}">
+        <td class="ov-bind-provider">${esc(PROVIDER_LABELS[p] || p)}</td>
+        <td>${bindStamp(isBound)}</td>
+        <td class="ov-bind-conn">${connectionLink(p, e.connection_id, byID)}</td>
+      </tr>`;
+    }).join("");
+    return group + rows;
+  }).join("");
 
   el.innerHTML = `
-    <div class="page-head">
-      <h1>Overview</h1>
-      <p class="muted">App identity and integration status.</p>
+    <div class="page-head page-head-row user-page-head">
+      <div>
+        <p class="user-kicker">App · dossier</p>
+        <h1 class="user-page-title">Overview</h1>
+        <p class="muted">App identity and integration status.</p>
+      </div>
     </div>
-    <div class="panel">
+
+    <header class="user-dossier ov-dossier">
+      <div class="user-dossier__rail" aria-hidden="true">APP</div>
+      <div class="user-dossier__avatar">
+        <span class="user-avatar user-avatar--fallback user-avatar--lg ov-mark" aria-hidden="true">${esc(mark)}</span>
+      </div>
+      <div class="user-dossier__body">
+        <div class="user-dossier__meta-line">
+          <span class="user-dossier__ref">REF ${esc(shortRef(app.id))}</span>
+          ${appStatusStamp(app.status)}
+        </div>
+        <p class="user-dossier__title">${esc(app.name)}</p>
+        <p class="user-dossier__sub">${esc(app.slug)}</p>
+        <div class="user-dossier__actions">
+          <a class="user-ledger-link" href="#/apps/${esc(appID)}/config">Configure integrations</a>
+        </div>
+      </div>
+      <div class="user-dossier__balance" aria-label="Integrations bound">
+        <span class="user-dossier__balance-label">Bound</span>
+        <strong class="user-dossier__balance-value">${bound}<span class="ov-bound-total">/${PROVIDERS.length}</span></strong>
+        <span class="user-dossier__balance-hint">integrations</span>
+      </div>
+    </header>
+
+    <section class="user-meta-grid" aria-label="App identity">
+      <div class="user-meta user-meta--wide">
+        <span class="user-meta__k">App ID</span>
+        <span class="user-meta__v user-meta__v--id">${esc(app.id)}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Slug</span>
+        <span class="user-meta__v">${esc(app.slug)}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Status</span>
+        <span class="user-meta__v">${appStatusStamp(app.status)}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Created</span>
+        <span class="user-meta__v">${esc(fmtTime(app.created_at))}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Updated</span>
+        <span class="user-meta__v">${esc(fmtTime(app.updated_at))}</span>
+      </div>
+    </section>
+
+    <article class="apps-create ov-edit">
+      <div class="apps-create__head">
+        <h2>Identity</h2>
+        <span class="apps-create__badge">edit</span>
+      </div>
       <form id="patch-app">
-        <div class="form-row">
-          <div class="field"><label>Name</label><input name="name" value="${esc(app.name)}" required></div>
-          <div class="field"><label>Status</label>
-            <select name="status">
+        <div class="form-row ov-identity-row">
+          <div class="field field--name"><label>Name</label><input name="name" value="${esc(app.name)}" required autocomplete="off"></div>
+          <div class="field field--status"><label>Status</label>
+            <select name="status" id="ov-status">
               <option value="active" ${app.status === "active" ? "selected" : ""}>active</option>
               <option value="suspended" ${app.status === "suspended" ? "selected" : ""}>suspended</option>
             </select>
           </div>
         </div>
-        <p class="muted mono">id ${esc(app.id)} · slug ${esc(app.slug)}</p>
         <div class="form-actions">
-          <button type="submit">Save</button>
+          <button type="submit">Save identity</button>
         </div>
       </form>
-    </div>
-    <div class="stat-row">
-      <div class="stat">
-        <div class="stat-label">Integrations bound</div>
-        <div class="stat-value">${bound} / ${PROVIDERS.length}</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Next step</div>
-        <div class="stat-value"><a href="#/apps/${esc(appID)}/config">Configure integrations →</a></div>
+    </article>
+
+    <div class="user-ledger-head">
+      <h2>Integrations</h2>
+      <div class="user-ledger-links" aria-label="Related">
+        <a class="user-ledger-link" href="#/apps/${esc(appID)}/config">Configure</a>
       </div>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Provider</th><th>Source</th><th>Connection</th></tr></thead>
-        <tbody>
-          ${PROVIDERS.map((p) => {
-            const e = integ[p] || {};
-            return `<tr>
-              <td>${esc(PROVIDER_LABELS[p] || p)}</td>
-              <td>${esc(e.source || "—")}</td>
-              <td class="mono muted">${esc(e.connection_id || "not bound")}</td>
-            </tr>`;
-          }).join("")}
-        </tbody>
+    <div class="table-wrap apps-table-wrap ov-bind-wrap">
+      <table class="apps-table ov-bind-table">
+        <thead><tr><th>Provider</th><th>Status</th><th>Connection</th></tr></thead>
+        <tbody>${bindRows}</tbody>
       </table>
     </div>`;
+
+  applyRevealDelays(el, ".ov-bind-row[data-reveal]");
+  wireMobileSelect(el.querySelector("#ov-status"), { title: "Status" });
+
   el.querySelector("#patch-app").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);

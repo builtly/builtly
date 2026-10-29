@@ -68,8 +68,13 @@ body > #app {
 .mobile-bar,
 .sidebar-backdrop,
 .sidebar__close,
-.app-sheet,
-.app-sheet-backdrop {
+.choice-sheet,
+.choice-sheet-backdrop {
+  display: none;
+}
+
+/* Desktop: native select; trigger is mobile-only. */
+.choice-trigger {
   display: none;
 }
 
@@ -1080,7 +1085,8 @@ button[data-danger] {
   color: #6b7280;
 }
 
-.apps-create input {
+.apps-create input,
+.apps-create select {
   margin-bottom: 0;
   border: 1.5px solid var(--user-ink);
   border-radius: 0.1rem;
@@ -1095,7 +1101,8 @@ button[data-danger] {
   --pico-font-family: var(--admin-sans);
 }
 
-.apps-create input:focus {
+.apps-create input:focus,
+.apps-create select:focus {
   outline: 2px solid var(--user-amber);
   outline-offset: 1px;
   border-color: var(--user-ink);
@@ -1238,6 +1245,127 @@ button[data-danger] {
   color: var(--user-amber);
   border-color: var(--user-amber);
   background: rgba(255, 255, 255, 0.55);
+}
+
+/* Overview — app dossier */
+.ov-mark {
+  letter-spacing: 0.02em;
+}
+
+.ov-bound-total {
+  font-size: 0.55em;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: #8a8490;
+  margin-left: 0.05em;
+}
+
+.ov-dossier .user-dossier__actions {
+  margin-top: 0.65rem;
+}
+
+.ov-edit {
+  margin-top: 0;
+}
+
+.ov-identity-row {
+  width: 100%;
+  flex-wrap: nowrap;
+  align-items: end;
+}
+
+.ov-identity-row > .field--name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ov-identity-row > .field--status {
+  flex: 0 0 10.5rem;
+  width: 10.5rem;
+  max-width: 42%;
+}
+
+/* Beat global `button { width: auto !important }` so Status fills its column. */
+.ov-identity-row .field input,
+.ov-identity-row .field select,
+.ov-identity-row .field .choice-trigger {
+  width: 100% !important;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.ov-bind-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.ov-bind-table {
+  min-width: 28rem;
+}
+
+.ov-bind-link {
+  font-family: inherit;
+  font-weight: 650;
+  color: var(--user-ink);
+  text-decoration: none;
+}
+
+.ov-bind-link:hover {
+  color: var(--user-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ov-group-row td {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5c6570;
+  background: #ebe8e0;
+  border-top: 1px solid var(--user-ink);
+  border-bottom: 1px solid var(--user-rule);
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.ov-bind-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.ov-bind-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.ov-bind-row:hover td {
+  background: transparent;
+}
+
+.ov-bind-row td {
+  vertical-align: middle;
+  height: 2.85rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-bind-row { animation: none; }
+}
+
+.ov-bind-provider {
+  font-weight: 650;
+}
+
+.ov-bind-conn {
+  max-width: 16rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--user-ink);
 }
 
 /* Users — industrial ops casefile (roster + dossier) */
@@ -2216,12 +2344,78 @@ img.user-avatar {
     background: transparent;
   }
 
-  /* Desktop select stays in the drawer on wide screens only; phones use app sheet. */
+  /* Desktop select stays in the drawer; phones use choice sheet. */
   .app-switcher--select {
     display: none;
   }
 
-  .app-sheet-backdrop {
+  .ov-identity-row > .field--status {
+    flex-basis: 9.25rem;
+    width: 9.25rem;
+  }
+
+  /* Form selects → bottom choice sheet on phones. */
+  .field--choice {
+    position: relative;
+  }
+
+  .field--choice .choice-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .field--choice .choice-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100% !important; /* overrides global button width:auto !important */
+    margin: 0;
+    min-height: 2.65rem;
+    padding: 0.45rem 0.75rem;
+    border: 1.5px solid var(--user-ink, #1a1f2b);
+    border-radius: 0.1rem;
+    background: #fff;
+    color: var(--user-ink, #1a1f2b);
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-align: left;
+    box-shadow: none;
+    --pico-background-color: #fff;
+    --pico-border-color: var(--user-ink, #1a1f2b);
+    --pico-color: var(--user-ink, #1a1f2b);
+    --pico-border-radius: 0.1rem;
+  }
+
+  .field--choice .choice-trigger::after {
+    content: "";
+    flex: 0 0 auto;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-top: -0.15rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    opacity: 0.55;
+  }
+
+  .apps-create .choice-trigger,
+  .user-adjust .choice-trigger {
+    border-color: var(--user-ink);
+    --pico-border-color: var(--user-ink);
+  }
+
+  .choice-sheet-backdrop {
     display: block;
     position: fixed;
     inset: 0;
@@ -2232,11 +2426,11 @@ img.user-avatar {
     margin: 0;
   }
 
-  .app-sheet-backdrop[hidden] {
+  .choice-sheet-backdrop[hidden] {
     display: none !important;
   }
 
-  .app-sheet {
+  .choice-sheet {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
@@ -2256,23 +2450,23 @@ img.user-avatar {
     transition: transform 0.22s ease;
   }
 
-  .app-sheet[hidden] {
+  .choice-sheet[hidden] {
     display: none !important;
   }
 
-  .layout--app-sheet-open .app-sheet {
+  .layout--choice-sheet-open .choice-sheet {
     display: flex;
     transform: translateY(0);
   }
 
-  .app-sheet__head {
+  .choice-sheet__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
   }
 
-  .app-sheet__title {
+  .choice-sheet__title {
     margin: 0;
     font-size: 1.05rem;
     font-weight: 700;
@@ -2281,7 +2475,7 @@ img.user-avatar {
     --pico-typography-spacing-top: 0;
   }
 
-  .app-sheet__close {
+  .choice-sheet__close {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2301,19 +2495,16 @@ img.user-avatar {
     --pico-color: var(--admin-sidebar-fg);
   }
 
-  .app-picker--sheet {
+  .choice-sheet__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
   }
 
-  .app-picker__list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-  }
-
-  .app-picker__item {
+  .choice-sheet__item {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -2334,33 +2525,44 @@ img.user-avatar {
     --pico-border-radius: 0.1rem;
   }
 
-  .app-picker__item:hover,
-  .app-picker__item:focus {
+  .choice-sheet__item:hover,
+  .choice-sheet__item:focus {
     border-color: rgba(196, 92, 22, 0.7);
     background: rgba(196, 92, 22, 0.12);
     --pico-background-color: rgba(196, 92, 22, 0.12);
   }
 
-  .app-picker__item--current {
+  .choice-sheet__item--current {
     border-color: var(--admin-amber);
     background: rgba(196, 92, 22, 0.18);
     --pico-border-color: var(--admin-amber);
     --pico-background-color: rgba(196, 92, 22, 0.18);
   }
 
-  .app-picker__name {
+  .choice-sheet__item-label {
     font-size: 1.05rem;
     font-weight: 650;
     line-height: 1.25;
   }
 
-  .app-picker__slug {
+  .choice-sheet__item-sub {
     font-size: 0.82rem;
     color: var(--admin-sidebar-muted);
     letter-spacing: 0.02em;
   }
 
-  .app-sheet__all {
+  .choice-sheet__empty {
+    margin: 0;
+    padding: 0.75rem;
+    color: var(--admin-sidebar-muted);
+    font-size: 0.9rem;
+  }
+
+  .choice-sheet__footer:not([hidden]) {
+    display: block;
+  }
+
+  .choice-sheet__footer-link {
     display: block;
     text-align: center;
     padding: 0.65rem;
@@ -2370,7 +2572,7 @@ img.user-avatar {
     text-decoration: none;
   }
 
-  .app-sheet__all:hover {
+  .choice-sheet__footer-link:hover {
     color: #fff;
   }
 
@@ -2449,7 +2651,7 @@ img.user-avatar {
 
 @media (max-width: 800px) and (prefers-reduced-motion: reduce) {
   .sidebar,
-  .app-sheet {
+  .choice-sheet {
     transition: none;
   }
 }

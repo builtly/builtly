@@ -377,7 +377,9 @@ function openDrawer(el, title, bodyHTML) {
 }
 
 export async function renderConnections(el) {
-  let provider = new URLSearchParams(location.hash.split("?")[1] || "").get("provider") || "";
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  let provider = params.get("provider") || "";
+  const editID = params.get("edit") || "";
   if (!provider || !SCHEMAS[provider]) {
     provider = PROVIDERS[0];
     history.replaceState(null, "", "#/connections?provider=" + encodeURIComponent(provider));
@@ -514,4 +516,9 @@ export async function renderConnections(el) {
       }
     });
   });
+
+  if (editID) {
+    const editBtn = el.querySelector(`.edit-conn[data-id="${CSS.escape(editID)}"]`);
+    if (editBtn) editBtn.click();
+  }
 }
