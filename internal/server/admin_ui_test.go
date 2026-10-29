@@ -97,11 +97,18 @@ func TestAdminUIHeadersAndAssets(t *testing.T) {
 		t.Fatalf("Cache-Control=%q", rr.Header().Get("Cache-Control"))
 	}
 
-	for _, path := range []string{"/admin/app.js", "/admin/vendor/pico.min.css", "/admin/vendor/alpine.csp.min.js"} {
+	for _, path := range []string{
+		"/admin/app.js", "/admin/vendor/pico.min.css", "/admin/vendor/alpine.csp.min.js",
+		"/admin/icon.svg", "/admin/favicon.ico", "/admin/favicon-32.png", "/admin/apple-touch-icon.png",
+	} {
 		rr = httptest.NewRecorder()
 		srv.Router().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
 		if rr.Code != http.StatusOK {
 			t.Fatalf("GET %s: status %d", path, rr.Code)
+		}
+		ct := rr.Header().Get("Content-Type")
+		if strings.HasPrefix(ct, "text/html") || strings.HasPrefix(rr.Body.String(), "<!DOCTYPE html>") {
+			t.Fatalf("GET %s: SPA fallback leaked HTML (Content-Type=%q)", path, ct)
 		}
 	}
 	rr = httptest.NewRecorder()

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Builtly</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00ADD8"/>
+      <stop offset="1" stop-color="#007D9C"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <g transform="translate(0 -30)" stroke="#16323F" stroke-width="8" stroke-linejoin="round">
+
+    <!-- ears -->
+    <circle cx="146" cy="190" r="24" fill="#8FDCEC"/>
+    <circle cx="366" cy="190" r="24" fill="#8FDCEC"/>
+
+    <!-- body -->
+    <path d="M140 460 L140 236 C140 120 372 120 372 236 L372 460 Z" fill="#8FDCEC"/>
+
+    <!-- eyes -->
+    <circle cx="204" cy="236" r="46" fill="#FFFFFF"/>
+    <circle cx="308" cy="236" r="46" fill="#FFFFFF"/>
+    <circle cx="218" cy="244" r="17" fill="#16323F" stroke="none"/>
+    <circle cx="322" cy="244" r="17" fill="#16323F" stroke="none"/>
+    <circle cx="224" cy="238" r="5" fill="#FFFFFF" stroke="none"/>
+    <circle cx="328" cy="238" r="5" fill="#FFFFFF" stroke="none"/>
+
+    <!-- snout, teeth, nose -->
+    <path d="M244 318 h24 v24 a4 4 0 0 1 -4 4 h-16 a4 4 0 0 1 -4 -4 Z" fill="#FFFFFF" stroke-width="6"/>
+    <line x1="256" y1="320" x2="256" y2="344" stroke-width="4"/>
+    <ellipse cx="256" cy="304" rx="40" ry="24" fill="#F6D2A2"/>
+    <ellipse cx="256" cy="292" rx="17" ry="11" fill="#3B2A20" stroke="none"/>
+
+    <!-- hard hat -->
+    <path d="M164 166 C164 82 348 82 348 166 Z" fill="#FDDB3A"/>
+    <path d="M238 98 C238 90 274 90 274 98 L274 166 L238 166 Z" fill="#F5C518" stroke-width="6"/>
+    <rect x="128" y="158" width="256" height="24" rx="12" fill="#FDDB3A"/>
+
+    <!-- brick wall -->
+    <g fill="#FFF3DA">
+      <rect x="82"  y="370" width="110" height="50" rx="8"/>
+      <rect x="201" y="370" width="110" height="50" rx="8"/>
+      <rect x="320" y="370" width="110" height="50" rx="8"/>
+      <rect x="40"  y="429" width="96"  height="50" rx="8"/>
+      <rect x="145" y="429" width="110" height="50" rx="8"/>
+      <rect x="264" y="429" width="110" height="50" rx="8"/>
+      <rect x="383" y="429" width="96"  height="50" rx="8"/>
+    </g>
+
+    <!-- paws on the wall -->
+    <ellipse cx="184" cy="372" rx="26" ry="16" fill="#F6D2A2"/>
+    <ellipse cx="328" cy="372" rx="26" ry="16" fill="#F6D2A2"/>
+  </g>
+</svg>

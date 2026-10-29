@@ -25,6 +25,15 @@ const root = document.getElementById("app");
 /** @type {HTMLElement|null} */
 let mainEl = null;
 
+const GITHUB_URL = "https://github.com/builtly/builtly";
+const GITHUB_ICON = `<svg class="gh-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>`;
+
+function githubLink(className, { label = true } = {}) {
+  const text = label ? `<span>GitHub</span>` : "";
+  const aria = label ? "" : ` aria-label="GitHub"`;
+  return `<a class="${className}" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer"${aria}>${GITHUB_ICON}${text}</a>`;
+}
+
 onError((err) => {
   // clearError() calls onError(null) before each request — leave existing toasts.
   if (!err) return;
@@ -94,6 +103,7 @@ function shellHTML(parts, apps) {
         <span class="mobile-bar__burger" aria-hidden="true"></span>
       </button>
       <div class="mobile-bar__brand">
+        <img class="mobile-bar__logo" src="/admin/icon.svg" alt="" width="22" height="22">
         Builtly <span class="mobile-bar__mark">admin</span>
       </div>
       ${appSlug
@@ -104,10 +114,16 @@ function shellHTML(parts, apps) {
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__head">
         <div class="brand">
-          <span class="brand__name">Builtly</span>
-          <span class="brand__mark">admin</span>
+          <img class="brand__logo" src="/admin/icon.svg" alt="" width="36" height="36">
+          <div class="brand__text">
+            <span class="brand__name">Builtly</span>
+            <span class="brand__mark">admin</span>
+          </div>
         </div>
-        <button type="button" class="sidebar__close" id="sidebar-close" aria-label="Close menu">✕</button>
+        <div class="sidebar__head-actions">
+          ${githubLink("sidebar__github", { label: false })}
+          <button type="button" class="sidebar__close" id="sidebar-close" aria-label="Close menu">✕</button>
+        </div>
       </div>
       <label class="app-switcher app-switcher--select">
         <span>Current app</span>
@@ -260,27 +276,37 @@ function renderLogin() {
   teardownChrome();
   root.innerHTML = `
     <div class="login-wrap">
-      <article>
-        <header>
-          <h1>Builtly admin</h1>
-          <p class="muted">Enter the master admin token. Stored in <code>sessionStorage</code> for this tab only.</p>
-        </header>
-        <div id="login-error" hidden></div>
-        <form id="login-form">
-          <label>
-            Admin token
-            <input id="token" name="token" type="password" autocomplete="off" required>
-          </label>
-          <label>
-            <input type="checkbox" id="show-token"> Show token
-          </label>
-          <div class="form-actions">
-            <button type="submit">Continue</button>
+      <div class="login-panel" data-reveal="1">
+        <aside class="login-panel__rail" aria-hidden="true">ACCESS</aside>
+        <div class="login-panel__body">
+          <p class="user-kicker">Platform · access</p>
+          <div class="login-brand">
+            <img class="login-brand__logo" src="/admin/icon.svg" alt="" width="48" height="48">
+            <div class="login-brand__text">
+              <span class="login-brand__name">Builtly</span>
+              <span class="login-brand__mark">admin</span>
+            </div>
           </div>
-        </form>
-      </article>
+          <p class="login-lede">Master token unlocks this ops console. Kept in <code>sessionStorage</code> for this tab only.</p>
+          <div id="login-error" class="login-error" hidden></div>
+          <form id="login-form" class="login-form">
+            <label class="login-form__label" for="token">Admin token</label>
+            <input id="token" name="token" type="password" autocomplete="off" required spellcheck="false">
+            <label class="login-form__show">
+              <input type="checkbox" id="show-token">
+              <span>Show token</span>
+            </label>
+            <div class="login-form__footer">
+              ${githubLink("login-github")}
+              <button type="submit" class="login-form__submit">Continue</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>`;
   hydrate(root);
+  const panel = root.querySelector(".login-panel");
+  if (panel) requestAnimationFrame(() => panel.classList.add("login-panel--in"));
   document.getElementById("show-token").addEventListener("change", (ev) => {
     document.getElementById("token").type = ev.target.checked ? "text" : "password";
   });
@@ -294,12 +320,10 @@ function renderLogin() {
       boot();
     } catch {
       clearToken();
-      // api() already toasted the HTTP error; keep an inline hint on the login card.
+      // api() already toasted the HTTP error; keep an inline hint on the login panel.
       const box = document.getElementById("login-error");
       if (box) {
         box.hidden = false;
-        box.className = "banner";
-        box.setAttribute("data-tone", "err");
         box.setAttribute("role", "alert");
         box.textContent = "Token rejected. Check BUILTLY_ADMIN_TOKEN.";
       }
