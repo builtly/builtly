@@ -1578,6 +1578,251 @@ button[data-danger] {
   --pico-border-radius: 0.1rem;
 }
 
+/* API keys — credential roster */
+.keys-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem 0.85rem;
+}
+
+.keys-create {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
+}
+
+.keys-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.keys-table {
+  min-width: 42rem;
+}
+
+.keys-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 32ms);
+}
+
+.keys-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.keys-row:hover td {
+  background: transparent;
+}
+
+.keys-row td {
+  vertical-align: middle;
+  height: 3.15rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keys-row { animation: none; }
+}
+
+.keys-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.keys-identity__name {
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--user-ink);
+}
+
+.keys-identity__prefix {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.keys-scopes {
+  max-width: 12rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  color: #5c6570;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keys-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.keys-revoke {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--user-warn);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--user-warn);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: var(--user-warn);
+  --pico-color: var(--user-warn);
+  --pico-border-radius: 0.1rem;
+}
+
+.keys-revoke:hover {
+  background: rgba(154, 52, 18, 0.08);
+  --pico-background-color: rgba(154, 52, 18, 0.08);
+}
+
+.keys-modal .keys-modal__card {
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.15rem;
+  background: var(--user-paper);
+  box-shadow: 4px 4px 0 rgba(26, 31, 43, 0.14);
+}
+
+.keys-modal__head {
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.keys-modal__head .user-kicker {
+  margin: 0 0 0.2rem;
+}
+
+.keys-modal__head h2 {
+  font-family: inherit;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--user-ink);
+}
+
+.keys-modal__close {
+  border-radius: 0.1rem;
+}
+
+.keys-create-form .field label {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.keys-create-form input {
+  margin-bottom: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+  --pico-font-family: var(--admin-sans);
+}
+
+.keys-create-form input:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.keys-modal .form-actions {
+  gap: 0.55rem;
+}
+
+.keys-modal .form-actions button {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 0.1rem;
+  border: 1.5px solid var(--user-ink);
+  padding: 0.45rem 0.85rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.12);
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+}
+
+.keys-create-form button[type="submit"],
+.keys-modal #key-done {
+  background: var(--user-ink);
+  color: #f3f1eb;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+}
+
+.keys-modal .form-actions button.secondary,
+.keys-modal button.modal-cancel,
+.keys-modal #key-copy {
+  background: #fff;
+  color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-border-color: var(--user-ink);
+  --pico-color: var(--user-ink);
+}
+
+.keys-modal .form-actions button.secondary:hover,
+.keys-modal button.modal-cancel:hover,
+.keys-modal #key-copy:hover {
+  background: var(--user-paper);
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  --pico-background-color: var(--user-paper);
+  --pico-border-color: var(--user-amber);
+  --pico-color: var(--user-amber);
+}
+
+.keys-secret {
+  border: 1.5px solid var(--user-warn);
+  border-radius: 0.1rem;
+  background: #fff7ed;
+}
+
+.keys-secret .secret-once-value {
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+}
+
 /* Users — industrial ops casefile (roster + dossier) */
 
 .user-page-head {

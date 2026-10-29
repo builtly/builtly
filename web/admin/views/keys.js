@@ -1,49 +1,91 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
 
+function scopesLabel(scopes) {
+  if (!Array.isArray(scopes) || scopes.length === 0) return "default";
+  return scopes.join(", ");
+}
+
+function keyStatusStamp(revokedAt) {
+  return revokedAt
+    ? `<span class="user-stamp user-stamp--disabled">revoked</span>`
+    : `<span class="user-stamp user-stamp--active">active</span>`;
+}
+
+/** Set stagger delays via CSSOM — HTML style="" is blocked by admin CSP style-src. */
+function applyRevealDelays(root, selector) {
+  root.querySelectorAll(selector).forEach((node) => {
+    const n = Number(node.getAttribute("data-reveal") || "0");
+    if (Number.isFinite(n)) node.style.setProperty("--reveal", String(n));
+  });
+}
+
 export async function renderKeys(el, appID) {
-  el.innerHTML = `<h1>API keys</h1><p class="muted">Loading…</p>`;
+  el.innerHTML = `<div class="page-head"><h1>API keys</h1><p class="muted">Loading…</p></div>`;
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/api-keys");
   const items = data.items || [];
-  const rows = items.map((k) => `
-    <tr>
-      <td>${esc(k.name)}</td>
-      <td class="mono">${esc(k.prefix)}</td>
-      <td class="mono">${esc(JSON.stringify(k.scopes))}</td>
-      <td>${esc(fmtTime(k.revoked_at))}</td>
-      <td>${esc(fmtTime(k.last_used_at))}</td>
-      <td>${esc(fmtTime(k.created_at))}</td>
-      <td>${k.revoked_at ? "" : `<button type="button" class="danger revoke-key" data-id="${esc(k.id)}">Revoke</button>`}</td>
-    </tr>`).join("") || `<tr><td colspan="7" class="empty">No API keys yet — create one to call the API.</td></tr>`;
+  const activeN = items.filter((k) => !k.revoked_at).length;
+
+  const rows = items.map((k, i) => `
+    <tr class="keys-row" data-reveal="${i}">
+      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td>
+        <div class="keys-identity">
+          <span class="keys-identity__name">${esc(k.name)}</span>
+          <span class="keys-identity__prefix mono" title="${esc(k.prefix)}">${esc(k.prefix)}</span>
+        </div>
+      </td>
+      <td class="keys-scopes" title="${esc(scopesLabel(k.scopes))}">${esc(scopesLabel(k.scopes))}</td>
+      <td>${keyStatusStamp(k.revoked_at)}</td>
+      <td class="user-when">${esc(fmtTime(k.last_used_at))}</td>
+      <td class="user-when">${esc(fmtTime(k.created_at))}</td>
+      <td class="keys-actions">
+        ${k.revoked_at
+          ? `<span class="user-empty">—</span>`
+          : `<button type="button" class="keys-revoke revoke-key" data-id="${esc(k.id)}">Revoke</button>`}
+      </td>
+    </tr>`).join("") || `<tr><td colspan="7" class="empty user-empty-row">No API keys yet — create one to call the API.</td></tr>`;
 
   el.innerHTML = `
-    <div class="page-head page-head-row">
+    <div class="page-head page-head-row user-page-head">
       <div>
-        <h1>API keys</h1>
+        <p class="user-kicker">App · credentials</p>
+        <h1 class="user-page-title">API keys</h1>
         <p class="muted">Secrets are shown once at creation — store them securely.</p>
       </div>
-      <button type="button" id="add-key">Create key</button>
+      <div class="keys-head-actions">
+        <div class="user-count" aria-label="Active API keys">${activeN}<span class="ov-bound-total">/${items.length}</span></div>
+        <button type="button" class="keys-create" id="add-key">Create key</button>
+      </div>
     </div>
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Prefix</th><th>Scopes</th><th>Revoked</th><th>Last used</th><th>Created</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+
+    <div class="table-wrap apps-table-wrap keys-table-wrap">
+      <table class="apps-table keys-table">
+        <thead><tr>
+          <th class="user-idx-h"></th>
+          <th>Key</th><th>Scopes</th><th>Status</th><th>Last used</th><th>Created</th><th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
     </div>
-    <dialog id="key-dialog" class="modal">
-      <div class="modal-card">
-        <div class="modal-head">
-          <h2 id="key-dialog-title">Create key</h2>
-          <button type="button" class="secondary outline modal-close" aria-label="Close">✕</button>
+
+    <dialog id="key-dialog" class="modal keys-modal">
+      <div class="modal-card keys-modal__card">
+        <div class="modal-head keys-modal__head">
+          <div>
+            <p class="user-kicker">API key</p>
+            <h2 id="key-dialog-title">Create key</h2>
+          </div>
+          <button type="button" class="secondary outline modal-close keys-modal__close" aria-label="Close">✕</button>
         </div>
         <div id="key-form-panel">
-          <form id="create-key">
+          <form id="create-key" class="keys-create-form">
             <div class="form-row">
               <div class="field field--full"><label>Name</label><input name="name" required autocomplete="off" placeholder="e.g. production"></div>
             </div>
             <div class="form-row">
               <div class="field field--full">
                 <label>Scopes (comma-separated, optional)</label>
-                <input name="scopes" placeholder="leave empty for default">
+                <input name="scopes" placeholder="leave empty for default" autocomplete="off">
               </div>
             </div>
             <div class="form-actions">
@@ -53,7 +95,7 @@ export async function renderKeys(el, appID) {
           </form>
         </div>
         <div id="key-reveal-panel" hidden>
-          <div class="secret-once secret-once-strong" role="alert">
+          <div class="secret-once secret-once-strong keys-secret" role="alert">
             <p class="secret-once-warn"><strong>Copy this key now.</strong> It is shown only once and cannot be recovered.</p>
             <code id="key-secret-value" class="secret-once-value"></code>
           </div>
@@ -64,6 +106,8 @@ export async function renderKeys(el, appID) {
         </div>
       </div>
     </dialog>`;
+
+  applyRevealDelays(el, ".keys-row[data-reveal]");
 
   const dialog = el.querySelector("#key-dialog");
   const formPanel = el.querySelector("#key-form-panel");
