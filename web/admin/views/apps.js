@@ -26,47 +26,73 @@ const PROVIDER_LABELS = {
   affonso: "Affonso",
 };
 
+function appStatusStamp(status) {
+  const s = status || "unknown";
+  return `<span class="user-stamp user-stamp--${esc(s === "suspended" ? "disabled" : s)}">${esc(s)}</span>`;
+}
+
 export async function renderAppsList(el) {
   el.innerHTML = `<div class="page-head"><h1>Apps</h1><p class="muted">Loading…</p></div>`;
   const data = await api("GET", "/apps?limit=100");
   const items = data.items || [];
-  let rows = items.map((a) => `
-    <tr>
-      <td><a href="#/apps/${esc(a.id)}/config"><strong>${esc(a.name)}</strong></a></td>
-      <td class="mono">${esc(a.slug)}</td>
-      <td>${esc(a.status)}</td>
-      <td class="mono muted truncate" title="${esc(a.id)}">${esc(a.id)}</td>
-      <td class="muted">${esc(fmtTime(a.created_at))}</td>
-      <td class="actions">
-        <a href="#/apps/${esc(a.id)}/config">Open</a>
+  const rows = items.map((a, i) => `
+    <tr class="apps-row" data-reveal="${i}">
+      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td>
+        <a class="apps-identity" href="#/apps/${esc(a.id)}/config">
+          <span class="apps-identity__name">${esc(a.name)}</span>
+          <span class="apps-identity__slug">${esc(a.slug)}</span>
+        </a>
       </td>
-    </tr>`).join("");
-  if (!rows) {
-    rows = `<tr><td colspan="6" class="empty">No apps yet — create one to get started.</td></tr>`;
-  }
+      <td>${appStatusStamp(a.status)}</td>
+      <td class="apps-id" title="${esc(a.id)}">${esc(a.id)}</td>
+      <td class="user-when">${esc(fmtTime(a.created_at))}</td>
+      <td class="apps-actions">
+        <a class="apps-open" href="#/apps/${esc(a.id)}/config">Open</a>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="6" class="empty user-empty-row">No apps yet — create one to get started.</td></tr>`;
+
   el.innerHTML = `
-    <div class="page-head">
-      <h1>Apps</h1>
-      <p class="muted">Create an app first, then bind integrations and issue API keys under it.</p>
+    <div class="page-head page-head-row user-page-head">
+      <div>
+        <p class="user-kicker">Platform · catalog</p>
+        <h1 class="user-page-title">Apps</h1>
+        <p class="muted">Create an app first, then bind integrations and issue API keys under it.</p>
+      </div>
+      <div class="user-count" aria-label="Total apps">${items.length}</div>
     </div>
-    <div class="panel">
-      <h2>Create app</h2>
+
+    <article class="apps-create">
+      <div class="apps-create__head">
+        <h2>Create app</h2>
+        <span class="apps-create__badge">new</span>
+      </div>
       <form id="create-app">
         <div class="form-row">
-          <div class="field"><label>Slug</label><input name="slug" required pattern="[a-z0-9-]{3,40}" placeholder="my-app"></div>
-          <div class="field"><label>Name</label><input name="name" required placeholder="My App"></div>
+          <div class="field"><label>Slug</label><input name="slug" required pattern="[a-z0-9-]{3,40}" placeholder="my-app" autocomplete="off"></div>
+          <div class="field"><label>Name</label><input name="name" required placeholder="My App" autocomplete="off"></div>
         </div>
         <div class="form-actions">
           <button type="submit">Create &amp; configure</button>
         </div>
       </form>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Name</th><th>Slug</th><th>Status</th><th>ID</th><th>Created</th><th></th></tr></thead>
+    </article>
+
+    <div class="table-wrap apps-table-wrap">
+      <table class="apps-table">
+        <thead><tr>
+          <th class="user-idx-h"></th>
+          <th>App</th><th>Status</th><th>ID</th><th>Created</th><th></th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  el.querySelectorAll(".apps-row[data-reveal]").forEach((row) => {
+    const n = Number(row.getAttribute("data-reveal") || "0");
+    if (Number.isFinite(n)) row.style.setProperty("--reveal", String(n));
+  });
+
   el.querySelector("#create-app").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);

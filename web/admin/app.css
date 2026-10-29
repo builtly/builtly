@@ -1019,7 +1019,7 @@ button[data-danger] {
   width: 1%;
 }
 
-/* Users — industrial ops casefile (roster + dossier) */
+/* Shared industrial ops tokens (Users, Apps, …) */
 :root {
   --user-ink: #1a1f2b;
   --user-paper: #f3f1eb;
@@ -1028,6 +1028,219 @@ button[data-danger] {
   --user-teal: #0f6b5c;
   --user-warn: #9a3412;
 }
+
+/* Apps — platform catalog roster */
+.apps-create {
+  margin: 0 0 1.25rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1.5px dashed var(--user-ink);
+  border-radius: 0.15rem;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 6px,
+      rgba(26, 31, 43, 0.03) 6px,
+      rgba(26, 31, 43, 0.03) 12px
+    ),
+    #faf9f6;
+}
+
+.apps-create__head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+.apps-create__head h2 {
+  margin: 0;
+  font-family: inherit;
+  --pico-typography-spacing-top: 0;
+}
+
+.apps-create__badge {
+  font-family: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--user-amber);
+  border: 1px solid var(--user-amber);
+  padding: 0.08rem 0.35rem;
+  border-radius: 0.1rem;
+}
+
+.apps-create .field label {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.apps-create input {
+  margin-bottom: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+  --pico-font-family: var(--admin-sans);
+}
+
+.apps-create input:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.apps-create button[type="submit"] {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
+}
+
+.apps-table-wrap {
+  border: 1px solid var(--user-ink);
+}
+
+.apps-table-wrap > table.apps-table {
+  min-width: 40rem;
+  margin-bottom: 0;
+}
+
+.apps-table thead th {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5c6570;
+  background: #ebe8e0;
+  border-bottom: 1px solid var(--user-ink);
+}
+
+.apps-table {
+  border-collapse: collapse;
+}
+
+.apps-table tbody td {
+  vertical-align: middle;
+  height: 3.15rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  background: transparent;
+}
+
+.apps-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 32ms);
+}
+
+/* Full-row hover — keep cells transparent so tint is continuous under Open. */
+.apps-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.apps-row:hover td {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apps-row { animation: none; }
+}
+
+.apps-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.apps-identity:hover .apps-identity__name {
+  color: var(--user-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.apps-identity__name {
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.apps-identity__slug {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.apps-id {
+  max-width: 12rem;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #5c6570;
+}
+
+.apps-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
+}
+
+.apps-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.7rem;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--user-ink);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.apps-open:hover {
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* Users — industrial ops casefile (roster + dossier) */
 
 .user-page-head {
   align-items: flex-end;
