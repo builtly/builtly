@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/builtly/builtly/internal/apperr"
 	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/platform/ratelimit"
@@ -60,6 +62,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Email        string          `json:"email"`
 		Password     string          `json:"password"`
 		DisplayName  string          `json:"display_name"`
+		Locale       string          `json:"locale"`
 		ReferralCode string          `json:"referral_code"`
 		Attribution  json.RawMessage `json:"attribution"`
 	}
@@ -67,9 +70,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	locale := body.Locale
+	if locale == "" {
+		locale = r.Header.Get("Accept-Language")
+	}
 	resp, err := h.svc.Register(r.Context(), app, RegisterInput{
 		Email: body.Email, Password: body.Password, DisplayName: body.DisplayName,
-		ReferralCode: body.ReferralCode, Attribution: body.Attribution,
+		Locale: locale, ReferralCode: body.ReferralCode, Attribution: body.Attribution,
 		UserAgent: r.UserAgent(), IP: ip,
 	})
 	if err != nil {
@@ -270,12 +277,83 @@ func (h *Handler) PatchMe(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		DisplayName *string `json:"display_name"`
 		AvatarURL   *string `json:"avatar_url"`
+		Locale      *string `json:"locale"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	me, err := h.svc.PatchMe(r.Context(), app.ID, p.UserID, body.DisplayName, body.AvatarURL)
+	me, err := h.svc.PatchMe(r.Context(), app.ID, p.UserID, body.DisplayName, body.AvatarURL, body.Locale)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, me)
+}
+
+// CreateAvatar handles POST /user/me/avatar.
+func (h *Handler) CreateAvatar(w http.ResponseWriter, r *http.Request) {
+	app, ok := h.app(r)
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	p, ok := principal.FromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	var body struct {
+		Filename    string `json:"filename"`
+		ContentType string `json:"content_type"`
+		SizeBytes   int64  `json:"size_bytes"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	res, err := h.svc.BeginAvatarUpload(r.Context(), app, p.UserID, body.Filename, body.ContentType, body.SizeBytes)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
+		"file": map[string]any{
+			"id": res.FileID, "filename": res.Filename,
+			"content_type": res.ContentType, "size_bytes": res.SizeBytes,
+		},
+		"upload": map[string]any{
+			"method": res.Upload.Method, "url": res.Upload.URL,
+			"headers": res.Upload.Headers, "expires_at": res.Upload.ExpiresAt,
+		},
+	})
+}
+
+// CompleteAvatar handles POST /user/me/avatar/complete.
+func (h *Handler) CompleteAvatar(w http.ResponseWriter, r *http.Request) {
+	app, ok := h.app(r)
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	p, ok := principal.FromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	var body struct {
+		FileID string `json:"file_id"`
+	}
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	fileID, err := uuid.Parse(body.FileID)
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid file_id"}))
+		return
+	}
+	me, err := h.svc.CompleteAvatarUpload(r.Context(), app, p.UserID, fileID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return

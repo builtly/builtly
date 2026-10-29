@@ -34,7 +34,7 @@ type productRow struct {
 	StripePriceID   *string   `db:"stripe_price_id"`
 	AppleProductID  *string   `db:"apple_product_id"`
 	GoogleProductID *string   `db:"google_product_id"`
-	Active          int       `db:"active"`
+	Active          bool      `db:"active"`
 	SortOrder       int       `db:"sort_order"`
 	Metadata        []byte    `db:"metadata"`
 	CreatedAt       db.Time   `db:"created_at"`
@@ -46,7 +46,7 @@ func (r productRow) toProduct() Product {
 		ID: r.ID, AppID: r.AppID, SKU: r.SKU, Name: r.Name, Description: r.Description, Kind: r.Kind,
 		Credits: r.Credits, PriceAmount: r.PriceAmount, Currency: r.Currency,
 		StripePriceID: r.StripePriceID, AppleProductID: r.AppleProductID, GoogleProductID: r.GoogleProductID,
-		Active: r.Active != 0, SortOrder: r.SortOrder, Metadata: r.Metadata,
+		Active: r.Active, SortOrder: r.SortOrder, Metadata: r.Metadata,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
@@ -71,7 +71,7 @@ func (s *Store) List(ctx context.Context, q db.Querier, appID uuid.UUID, activeO
 	args := []any{appID}
 	if activeOnly {
 		query += ` AND active = ?`
-		args = append(args, 1)
+		args = append(args, s.db.BoolArg(true))
 	}
 	query += ` ORDER BY sort_order, created_at`
 	var rows []productRow
@@ -87,10 +87,6 @@ func (s *Store) List(ctx context.Context, q db.Querier, appID uuid.UUID, activeO
 
 // Insert creates a product.
 func (s *Store) Insert(ctx context.Context, q db.Querier, p Product) error {
-	active := 0
-	if p.Active {
-		active = 1
-	}
 	meta := p.Metadata
 	if len(meta) == 0 {
 		meta = []byte(`{}`)
@@ -101,7 +97,7 @@ func (s *Store) Insert(ctx context.Context, q db.Querier, p Product) error {
 			stripe_price_id, apple_product_id, google_product_id, active, sort_order, metadata, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		p.ID, p.AppID, p.SKU, p.Name, p.Description, p.Kind, p.Credits, p.PriceAmount, p.Currency,
-		p.StripePriceID, p.AppleProductID, p.GoogleProductID, active, p.SortOrder, meta, p.CreatedAt, p.UpdatedAt)
+		p.StripePriceID, p.AppleProductID, p.GoogleProductID, s.db.BoolArg(p.Active), p.SortOrder, meta, p.CreatedAt, p.UpdatedAt)
 	return db.MapError(err)
 }
 
@@ -127,10 +123,6 @@ func (s *Store) GetByGoogleProductID(ctx context.Context, q db.Querier, appID uu
 
 // Update replaces mutable product fields.
 func (s *Store) Update(ctx context.Context, q db.Querier, p Product) error {
-	active := 0
-	if p.Active {
-		active = 1
-	}
 	meta := p.Metadata
 	if len(meta) == 0 {
 		meta = []byte(`{}`)
@@ -141,7 +133,7 @@ func (s *Store) Update(ctx context.Context, q db.Querier, p Product) error {
 			metadata = ?, updated_at = ?
 		WHERE app_id = ? AND id = ?`),
 		p.SKU, p.Name, p.Description, p.Credits, p.PriceAmount, p.Currency,
-		p.StripePriceID, p.AppleProductID, p.GoogleProductID, active, p.SortOrder, meta, p.UpdatedAt,
+		p.StripePriceID, p.AppleProductID, p.GoogleProductID, s.db.BoolArg(p.Active), p.SortOrder, meta, p.UpdatedAt,
 		p.AppID, p.ID)
 	if err != nil {
 		return db.MapError(err)

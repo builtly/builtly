@@ -26,7 +26,7 @@ func (s *Store) q(q db.Querier) db.Querier {
 }
 
 const selectUser = `SELECT id, app_id, email, email_verified_at, password_hash, display_name, avatar_url,
-	status, attribution, referral_code, last_login_at, deleted_at, created_at, updated_at FROM users`
+	locale, last_ip, status, attribution, referral_code, last_login_at, deleted_at, created_at, updated_at FROM users`
 
 // GetByID loads a user by (app_id, id).
 func (s *Store) GetByID(ctx context.Context, q db.Querier, appID, userID uuid.UUID) (User, error) {
@@ -67,40 +67,57 @@ func (s *Store) Insert(ctx context.Context, q db.Querier, u User) error {
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
 		INSERT INTO users (
 			id, app_id, email, email_verified_at, password_hash, display_name, avatar_url,
-			status, attribution, referral_code, last_login_at, deleted_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+			locale, last_ip, status, attribution, referral_code, last_login_at, deleted_at, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		u.ID, u.AppID, u.Email, u.EmailVerifiedAt, u.PasswordHash, u.DisplayName, u.AvatarURL,
-		u.Status, attr, u.ReferralCode, u.LastLoginAt, u.DeletedAt, u.CreatedAt, u.UpdatedAt)
+		u.Locale, u.LastIP, u.Status, attr, u.ReferralCode, u.LastLoginAt, u.DeletedAt, u.CreatedAt, u.UpdatedAt)
 	return db.MapError(err)
 }
 
-// List returns users for an app with optional email/id prefix filter.
-func (s *Store) List(ctx context.Context, q db.Querier, appID uuid.UUID, query, status string, limit int) ([]User, error) {
+func usersListWhere(appID uuid.UUID, query, status string) (where string, args []any) {
+	args = []any{appID}
+	where = `WHERE app_id = ?`
+	if status != "" {
+		where += ` AND status = ?`
+		args = append(args, status)
+	}
+	if query != "" {
+		like := query + "%"
+		where += ` AND (email LIKE ? OR CAST(id AS TEXT) LIKE ?)`
+		args = append(args, like, like)
+	}
+	return where, args
+}
+
+// Count returns users matching optional email/id prefix and status filters.
+func (s *Store) Count(ctx context.Context, q db.Querier, appID uuid.UUID, query, status string) (int, error) {
+	where, args := usersListWhere(appID, query, status)
+	var n int
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM users `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	return n, nil
+}
+
+// List returns users for an app with optional email/id prefix filter and keyset cursor.
+// after/afterID empty means the first page; order is created_at DESC, id DESC.
+func (s *Store) List(ctx context.Context, q db.Querier, appID uuid.UUID, query, status string, limit int, after db.Time, afterID uuid.UUID) ([]User, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	var (
-		rows []User
-		err  error
-	)
-	switch {
-	case query != "" && status != "":
-		like := query + "%"
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectUser+`
-			WHERE app_id = ? AND status = ? AND (email LIKE ? OR CAST(id AS TEXT) LIKE ?)
-			ORDER BY created_at DESC LIMIT ?`), appID, status, like, like, limit)
-	case query != "":
-		like := query + "%"
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectUser+`
-			WHERE app_id = ? AND (email LIKE ? OR CAST(id AS TEXT) LIKE ?)
-			ORDER BY created_at DESC LIMIT ?`), appID, like, like, limit)
-	case status != "":
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectUser+`
-			WHERE app_id = ? AND status = ? ORDER BY created_at DESC LIMIT ?`), appID, status, limit)
-	default:
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectUser+`
-			WHERE app_id = ? ORDER BY created_at DESC LIMIT ?`), appID, limit)
+	if limit > 100 {
+		limit = 100
 	}
+	where, args := usersListWhere(appID, query, status)
+	if afterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, after, after, afterID)
+	}
+	args = append(args, limit)
+	var rows []User
+	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectUser+` `+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	if err != nil {
 		return nil, db.MapError(err)
 	}
@@ -130,8 +147,8 @@ func (s *Store) UpdatePasswordHash(ctx context.Context, q db.Querier, appID, use
 	return db.MapError(err)
 }
 
-// UpdateProfile patches display_name / avatar_url.
-func (s *Store) UpdateProfile(ctx context.Context, q db.Querier, appID, userID uuid.UUID, displayName, avatarURL *string, now db.Time) error {
+// UpdateProfile patches display_name / avatar_url / locale.
+func (s *Store) UpdateProfile(ctx context.Context, q db.Querier, appID, userID uuid.UUID, displayName, avatarURL, locale *string, now db.Time) error {
 	u, err := s.GetByID(ctx, q, appID, userID)
 	if err != nil {
 		return err
@@ -142,9 +159,12 @@ func (s *Store) UpdateProfile(ctx context.Context, q db.Querier, appID, userID u
 	if avatarURL != nil {
 		u.AvatarURL = *avatarURL
 	}
+	if locale != nil {
+		u.Locale = *locale
+	}
 	_, err = s.q(q).ExecContext(ctx, s.db.Rebind(`
-		UPDATE users SET display_name = ?, avatar_url = ?, updated_at = ? WHERE app_id = ? AND id = ?`),
-		u.DisplayName, u.AvatarURL, now, appID, userID)
+		UPDATE users SET display_name = ?, avatar_url = ?, locale = ?, updated_at = ? WHERE app_id = ? AND id = ?`),
+		u.DisplayName, u.AvatarURL, u.Locale, now, appID, userID)
 	return db.MapError(err)
 }
 
@@ -156,11 +176,11 @@ func (s *Store) MarkEmailVerified(ctx context.Context, q db.Querier, appID, user
 	return db.MapError(err)
 }
 
-// TouchLastLogin updates last_login_at.
-func (s *Store) TouchLastLogin(ctx context.Context, q db.Querier, appID, userID uuid.UUID, now db.Time) error {
+// TouchLastLogin updates last_login_at and last_ip.
+func (s *Store) TouchLastLogin(ctx context.Context, q db.Querier, appID, userID uuid.UUID, ip string, now db.Time) error {
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
-		UPDATE users SET last_login_at = ?, updated_at = ? WHERE app_id = ? AND id = ?`),
-		now, now, appID, userID)
+		UPDATE users SET last_login_at = ?, last_ip = ?, updated_at = ? WHERE app_id = ? AND id = ?`),
+		now, ip, now, appID, userID)
 	return db.MapError(err)
 }
 
@@ -168,7 +188,8 @@ func (s *Store) TouchLastLogin(ctx context.Context, q db.Querier, appID, userID 
 func (s *Store) SoftDelete(ctx context.Context, q db.Querier, appID, userID uuid.UUID, now db.Time) error {
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
 		UPDATE users SET status = ?, deleted_at = ?, email = NULL, password_hash = NULL,
-			display_name = '', attribution = '{}', referral_code = NULL, updated_at = ?
+			display_name = '', avatar_url = '', locale = '', last_ip = '', attribution = '{}',
+			referral_code = NULL, updated_at = ?
 		WHERE app_id = ? AND id = ? AND status <> ?`),
 		StatusDeleted, now, now, appID, userID, StatusDeleted)
 	return db.MapError(err)
@@ -207,16 +228,12 @@ func (s *Store) GetIdentityBySubject(ctx context.Context, q db.Querier, appID uu
 
 // InsertIdentity creates a linked identity.
 func (s *Store) InsertIdentity(ctx context.Context, q db.Querier, id Identity) error {
-	ev := 0
-	if id.EmailVerified {
-		ev = 1
-	}
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
 		INSERT INTO user_identities (
 			id, app_id, user_id, provider, provider_subject, email, email_verified,
 			provider_refresh_enc, created_at, last_used_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-		id.ID, id.AppID, id.UserID, id.Provider, id.ProviderSubject, id.Email, ev,
+		id.ID, id.AppID, id.UserID, id.Provider, id.ProviderSubject, id.Email, s.db.BoolArg(id.EmailVerified),
 		id.ProviderRefreshEnc, id.CreatedAt, id.LastUsedAt)
 	return db.MapError(err)
 }

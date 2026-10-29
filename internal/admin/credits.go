@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,7 +26,19 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	users, err := h.users.List(r.Context(), nil, appID, r.URL.Query().Get("q"), r.URL.Query().Get("status"), limit)
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	q := r.URL.Query().Get("q")
+	status := r.URL.Query().Get("status")
+	users, err := h.users.List(r.Context(), nil, appID, q, status, limit, after, afterID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	total, err := h.users.Count(r.Context(), nil, appID, q, status)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -34,10 +48,42 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		bal, _ := h.credits.GetBalance(r.Context(), appID, u.ID)
 		items = append(items, map[string]any{
 			"id": u.ID, "email": u.Email, "status": u.Status,
+			"display_name": u.DisplayName, "avatar_url": u.AvatarURL,
+			"locale": u.Locale, "last_ip": u.LastIP, "utm_source": attributionUTM(u.Attribution),
 			"balance": bal.Balance, "created_at": u.CreatedAt, "last_login_at": nullTime(u.LastLoginAt),
 		})
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if len(users) == limit && limit > 0 {
+		last := users[len(users)-1]
+		resp["next_cursor"] = time.Time(last.CreatedAt).UTC().Format(time.RFC3339Nano) + "," + last.ID.String()
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func parseUsersCursor(cursor string) (db.Time, uuid.UUID, error) {
+	if cursor == "" {
+		return db.Time{}, uuid.Nil, nil
+	}
+	parts := strings.SplitN(cursor, ",", 2)
+	if len(parts) != 2 {
+		return db.Time{}, uuid.Nil, errors.New("invalid cursor")
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return db.Time{}, uuid.Nil, err
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return db.Time{}, uuid.Nil, err
+	}
+	return db.Time(t), id, nil
 }
 
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
@@ -88,9 +134,24 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"id": u.ID, "email": u.Email, "display_name": u.DisplayName,
-		"status": u.Status, "balance": bal.Balance, "created_at": u.CreatedAt,
-		"identities": []any{}, "purchases": purchases,
+		"avatar_url": u.AvatarURL, "locale": u.Locale, "last_ip": u.LastIP,
+		"utm_source": attributionUTM(u.Attribution),
+		"status":     u.Status, "balance": bal.Balance, "created_at": u.CreatedAt,
+		"last_login_at": nullTime(u.LastLoginAt),
+		"identities":    []any{}, "purchases": purchases,
 	})
+}
+
+func attributionUTM(attr []byte) string {
+	if len(attr) == 0 {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal(attr, &m); err != nil {
+		return ""
+	}
+	v, _ := m["utm_source"].(string)
+	return v
 }
 
 func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {

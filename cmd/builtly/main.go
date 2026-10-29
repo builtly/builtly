@@ -186,6 +186,7 @@ func runServe(args []string) int {
 	billingSvc.SetAffiliate(affReg)
 	storageSvc := storage.NewService(database, storage.NewStore(database), resolver, storage.NewR2Client(hc))
 	authSvc.SetFileMarker(storageSvc)
+	authSvc.SetAvatarUploader(auth.StorageAvatars{Storage: storageSvc})
 	registry.SetHandler(outbox.SubStoragePurge, storage.NewPurgeSubscriber(storageSvc, log).Handle)
 	referralSvc := referral.NewService(
 		database, referral.NewStore(database), creditSvc, publisher,

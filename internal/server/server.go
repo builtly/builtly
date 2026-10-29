@@ -178,6 +178,8 @@ func (s *Server) buildRouter() chi.Router {
 							user.Get("/user/me", s.deps.Auth.GetMe)
 							user.Patch("/user/me", s.deps.Auth.PatchMe)
 							user.Delete("/user/me", s.deps.Auth.DeleteMe)
+							user.Post("/user/me/avatar", s.deps.Auth.CreateAvatar)
+							user.Post("/user/me/avatar/complete", s.deps.Auth.CompleteAvatar)
 						}
 						if s.deps.Billing != nil {
 							user.Post("/checkout/stripe", s.deps.Billing.CheckoutStripe)

@@ -24,6 +24,26 @@ type FileMarker interface {
 	MarkDeletedForUser(ctx context.Context, tx *sqlx.Tx, appID, userID uuid.UUID) error
 }
 
+// AvatarUploader reserves and completes avatar uploads to object storage (R2).
+type AvatarUploader interface {
+	BeginAvatar(ctx context.Context, app tenant.App, userID uuid.UUID, filename, contentType string, sizeBytes int64) (AvatarUploadBegin, error)
+	FinishAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (publicURL string, err error)
+}
+
+// AvatarUploadBegin is the create-avatar response payload.
+type AvatarUploadBegin struct {
+	FileID      uuid.UUID
+	Filename    string
+	ContentType string
+	SizeBytes   int64
+	Upload      struct {
+		Method    string
+		URL       string
+		Headers   map[string]string
+		ExpiresAt time.Time
+	}
+}
+
 // ReferralApplier applies referral codes at sign-up / deletion void.
 type ReferralApplier interface {
 	ApplyTx(ctx context.Context, tx *sqlx.Tx, app tenant.App, refereeID uuid.UUID, code string) (referral.ApplyResult, error)
@@ -40,6 +60,7 @@ type Service struct {
 	refreshTTL time.Duration
 	oauth      OAuthDeps
 	files      FileMarker
+	avatars    AvatarUploader
 	referrals  ReferralApplier
 }
 
@@ -66,6 +87,7 @@ type RegisterInput struct {
 	Email        string
 	Password     string
 	DisplayName  string
+	Locale       string
 	ReferralCode string
 	Attribution  json.RawMessage
 	UserAgent    string
@@ -111,8 +133,9 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 		}
 		u := User{
 			ID: uid, AppID: app.ID, Email: &emailAddr, PasswordHash: &hash,
-			DisplayName: in.DisplayName, Status: StatusActive,
-			Attribution: attr, ReferralCode: &code, CreatedAt: now, UpdatedAt: now,
+			DisplayName: in.DisplayName, Locale: NormalizeLocale(in.Locale), LastIP: in.IP,
+			Status: StatusActive, Attribution: attr, ReferralCode: &code,
+			CreatedAt: now, UpdatedAt: now,
 		}
 		if err := s.store.Insert(ctx, tx, u); err != nil {
 			var uv db.ErrUniqueViolation
@@ -272,7 +295,7 @@ func (s *Service) Refresh(ctx context.Context, app tenant.App, raw, userAgent, i
 		if err != nil {
 			return err
 		}
-		_ = s.store.TouchLastLogin(ctx, tx, app.ID, u.ID, db.Time(now))
+		_ = s.store.TouchLastLogin(ctx, tx, app.ID, u.ID, ip, db.Time(now))
 		resp = TokenResponse{
 			User: toPublicUser(u),
 			Tokens: Tokens{
@@ -454,6 +477,7 @@ func (s *Service) Me(ctx context.Context, appID, userID uuid.UUID) (MeResponse, 
 	out := MeResponse{
 		ID: u.ID, Email: u.Email, EmailVerified: u.EmailVerifiedAt.Valid,
 		DisplayName: u.DisplayName, AvatarURL: u.AvatarURL,
+		Locale: u.Locale, LastIP: u.LastIP, UTMSource: attributionUTMSource(u.Attribution),
 		HasPassword: u.PasswordHash != nil && *u.PasswordHash != "",
 		CreatedAt:   u.CreatedAt,
 		Identities:  make([]MeIdentity, 0, len(idents)),
@@ -465,8 +489,12 @@ func (s *Service) Me(ctx context.Context, appID, userID uuid.UUID) (MeResponse, 
 }
 
 // PatchMe updates profile fields.
-func (s *Service) PatchMe(ctx context.Context, appID, userID uuid.UUID, displayName, avatarURL *string) (MeResponse, error) {
-	if err := s.store.UpdateProfile(ctx, nil, appID, userID, displayName, avatarURL, db.Now()); err != nil {
+func (s *Service) PatchMe(ctx context.Context, appID, userID uuid.UUID, displayName, avatarURL, locale *string) (MeResponse, error) {
+	if locale != nil {
+		norm := NormalizeLocale(*locale)
+		locale = &norm
+	}
+	if err := s.store.UpdateProfile(ctx, nil, appID, userID, displayName, avatarURL, locale, db.Now()); err != nil {
 		if IsNotFound(err) {
 			return MeResponse{}, ErrUserNotFound
 		}
@@ -475,8 +503,35 @@ func (s *Service) PatchMe(ctx context.Context, appID, userID uuid.UUID, displayN
 	return s.Me(ctx, appID, userID)
 }
 
+// BeginAvatarUpload reserves an R2 PUT for the user's avatar.
+func (s *Service) BeginAvatarUpload(ctx context.Context, app tenant.App, userID uuid.UUID, filename, contentType string, sizeBytes int64) (AvatarUploadBegin, error) {
+	if s.avatars == nil {
+		return AvatarUploadBegin{}, ErrIntegrationNotConfigured
+	}
+	u, err := s.store.GetByID(ctx, nil, app.ID, userID)
+	if err != nil || u.Status == StatusDeleted {
+		return AvatarUploadBegin{}, ErrUserNotFound
+	}
+	return s.avatars.BeginAvatar(ctx, app, userID, filename, contentType, sizeBytes)
+}
+
+// CompleteAvatarUpload verifies the object and sets avatar_url to the public R2 URL.
+func (s *Service) CompleteAvatarUpload(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (MeResponse, error) {
+	if s.avatars == nil {
+		return MeResponse{}, ErrIntegrationNotConfigured
+	}
+	publicURL, err := s.avatars.FinishAvatar(ctx, app, userID, fileID)
+	if err != nil {
+		return MeResponse{}, err
+	}
+	return s.PatchMe(ctx, app.ID, userID, nil, &publicURL, nil)
+}
+
 // SetFileMarker wires storage file purge on account deletion.
 func (s *Service) SetFileMarker(m FileMarker) { s.files = m }
+
+// SetAvatarUploader wires avatar uploads to object storage.
+func (s *Service) SetAvatarUploader(u AvatarUploader) { s.avatars = u }
 
 // SetReferrals wires the referral program.
 func (s *Service) SetReferrals(r ReferralApplier) { s.referrals = r }
@@ -570,7 +625,7 @@ func (s *Service) issueSessionTx(ctx context.Context, tx *sqlx.Tx, app tenant.Ap
 	if err != nil {
 		return TokenResponse{}, err
 	}
-	_ = s.store.TouchLastLogin(ctx, tx, app.ID, u.ID, db.Time(now))
+	_ = s.store.TouchLastLogin(ctx, tx, app.ID, u.ID, ip, db.Time(now))
 	return TokenResponse{
 		User:      toPublicUser(u),
 		IsNewUser: isNew,

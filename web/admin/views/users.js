@@ -1,57 +1,180 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
+import { getAppsCache } from "../context.js";
+
+function appLabel(appID) {
+  const app = (getAppsCache() || []).find((a) => a.id === appID);
+  if (!app) return { name: "", slug: shortRef(appID) };
+  return { name: app.name || "", slug: app.slug || shortRef(appID) };
+}
+
+function initials(email, name) {
+  const src = (name || email || "?").trim();
+  if (!src) return "?";
+  if (src.includes("@")) return src.slice(0, 1).toUpperCase();
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
+
+function statusChip(status) {
+  const s = status || "unknown";
+  return `<span class="user-stamp user-stamp--${esc(s)}">${esc(s)}</span>`;
+}
+
+function avatarThumb(u, sizeClass = "") {
+  const label = initials(u.email, u.display_name);
+  if (u.avatar_url) {
+    return `<img class="user-avatar ${sizeClass}" src="${esc(u.avatar_url)}" alt="" width="40" height="40">`;
+  }
+  return `<span class="user-avatar user-avatar--fallback ${sizeClass}" aria-hidden="true">${esc(label)}</span>`;
+}
+
+function cellOrDash(value, mono = false) {
+  if (!value) return `<span class="user-empty">—</span>`;
+  return `<span class="${mono ? "mono " : ""}user-cell">${esc(value)}</span>`;
+}
+
+function shortRef(id) {
+  if (!id) return "—";
+  return id.length > 10 ? id.slice(0, 8) : id;
+}
+
+const USERS_FIRST = "_";
+
+function encodeUsersCursor(c) {
+  return c || USERS_FIRST;
+}
+
+function decodeUsersCursor(c) {
+  return !c || c === USERS_FIRST ? "" : c;
+}
+
+function usersHash(appID, { q = "", cursor = "", trail = [] } = {}) {
+  const p = new URLSearchParams();
+  if (q) p.set("q", q);
+  if (cursor) p.set("cursor", cursor);
+  if (trail.length) p.set("trail", trail.map(encodeUsersCursor).join("|"));
+  const qs = p.toString();
+  return "#/apps/" + appID + "/users" + (qs ? "?" + qs : "");
+}
+
+function parseTrail(raw) {
+  if (!raw) return [];
+  return raw.split("|").filter((p) => p !== "").map(decodeUsersCursor);
+}
 
 export async function renderUsers(el, appID) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const q = params.get("q") || "";
-  el.innerHTML = `<h1>Users</h1><p class="muted">Loading…</p>`;
-  const qs = new URLSearchParams({ limit: "50" });
+  const cursor = params.get("cursor") || "";
+  const trail = parseTrail(params.get("trail") || "");
+  const page = trail.length + 1;
+  const pageSize = 50;
+  const app = appLabel(appID);
+  el.innerHTML = `<div class="page-head"><h1>Users</h1><p class="muted">Loading…</p></div>`;
+  const qs = new URLSearchParams({ limit: String(pageSize) });
   if (q) qs.set("q", q);
+  if (cursor) qs.set("cursor", cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/users?" + qs.toString());
   const items = data.items || [];
-  const rows = items.map((u) => `
-    <tr>
-      <td><a href="#/apps/${esc(appID)}/users/${esc(u.id)}">${esc(u.email)}</a></td>
-      <td class="mono">${esc(u.id)}</td>
-      <td>${esc(u.status)}</td>
-      <td>${esc(u.balance)}</td>
-      <td>${esc(fmtTime(u.last_login_at))}</td>
-      <td>${esc(fmtTime(u.created_at))}</td>
-    </tr>`).join("") || `<tr><td colspan="6" class="empty">No users.</td></tr>`;
+  const total = Number(data.total ?? items.length);
+  const nextCursor = data.next_cursor || "";
+  const rows = items.map((u, i) => `
+    <tr class="user-row" style="--reveal:${i}">
+      <td class="user-idx" aria-hidden="true">${String((page - 1) * pageSize + i + 1).padStart(2, "0")}</td>
+      <td>
+        <a class="user-identity" href="#/apps/${esc(appID)}/users/${esc(u.id)}">
+          ${avatarThumb(u)}
+          <span class="user-identity__text">
+            <span class="user-identity__email">${esc(u.email || "—")}</span>
+            <span class="user-identity__sub">${esc(u.display_name || "—")}</span>
+          </span>
+        </a>
+      </td>
+      <td class="user-id mono" title="${esc(u.id)}">${esc(u.id)}</td>
+      <td>${statusChip(u.status)}</td>
+      <td class="user-balance">${esc(u.balance)}</td>
+      <td class="user-attr" title="First-touch utm_source">${cellOrDash(u.utm_source)}</td>
+      <td class="user-locale">${cellOrDash(u.locale)}</td>
+      <td class="user-ip">${cellOrDash(u.last_ip, true)}</td>
+      <td class="user-when">${esc(fmtTime(u.created_at))}</td>
+      <td class="muted user-when">${esc(fmtTime(u.last_login_at))}</td>
+    </tr>`).join("") || `<tr><td colspan="10" class="empty">No users.</td></tr>`;
 
   el.innerHTML = `
-    <h1>Users</h1>
-    <form id="search" class="toolbar">
-      <div class="toolbar-fields">
-        <input name="q" value="${esc(q)}" placeholder="Search email or ID">
+    <div class="page-head page-head-row user-page-head">
+      <div>
+        <p class="user-kicker">Ops · accounts</p>
+        <h1 class="user-page-title">
+          Users
+          <span class="user-app-mark" title="${esc(app.name || app.slug)}">${esc(app.slug)}</span>
+        </h1>
+        <p class="muted">Manage app accounts — status, balance, locale, attribution, and login activity.</p>
       </div>
-      <button type="submit">Search</button>
+      <div class="user-count" aria-label="Total users">${total}</div>
+    </div>
+    <form id="search" class="toolbar user-search">
+      <label class="user-search__label" for="user-q">Find</label>
+      <div class="toolbar-fields">
+        <input id="user-q" name="q" value="${esc(q)}" placeholder="email or user id" autocomplete="off">
+      </div>
+      <button type="submit">Filter</button>
     </form>
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Email</th><th>ID</th><th>Status</th><th>Balance</th><th>Last login</th><th>Created</th></tr></thead>
+    <div class="table-wrap user-table-wrap">
+    <table class="user-table">
+      <thead><tr>
+        <th class="user-idx-h"></th>
+        <th>Identity</th>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Balance</th>
+        <th>Attribution</th>
+        <th>Locale</th>
+        <th>Last IP</th>
+        <th>Created</th>
+        <th>Last login</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    </div>`;
+    </div>
+    <nav class="user-pager" aria-label="Users pagination">
+      <button type="button" class="user-pager__btn" id="user-prev" ${trail.length ? "" : "disabled"}>Prev</button>
+      <span class="user-pager__meta">Page ${page} · ${items.length} shown</span>
+      <button type="button" class="user-pager__btn" id="user-next" ${nextCursor ? "" : "disabled"}>Next</button>
+    </nav>`;
 
   el.querySelector("#search").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const qq = new FormData(ev.target).get("q");
-    location.hash = "#/apps/" + appID + "/users" + (qq ? "?q=" + encodeURIComponent(String(qq)) : "");
+    location.hash = usersHash(appID, { q: String(qq || "") });
+    renderUsers(el, appID);
+  });
+
+  el.querySelector("#user-prev").addEventListener("click", () => {
+    if (!trail.length) return;
+    const prev = trail[trail.length - 1] || "";
+    location.hash = usersHash(appID, { q, cursor: prev, trail: trail.slice(0, -1) });
+    renderUsers(el, appID);
+  });
+
+  el.querySelector("#user-next").addEventListener("click", () => {
+    if (!nextCursor) return;
+    location.hash = usersHash(appID, { q, cursor: nextCursor, trail: [...trail, cursor] });
     renderUsers(el, appID);
   });
 }
 
 export async function renderUserDetail(el, appID, userID) {
-  el.innerHTML = `<h1>User</h1><p class="muted">Loading…</p>`;
+  el.innerHTML = `<div class="page-head"><h1>User</h1><p class="muted">Loading…</p></div>`;
   const base = "/apps/" + encodeURIComponent(appID) + "/users/" + encodeURIComponent(userID);
   const user = await api("GET", base);
   const ledger = await api("GET", base + "/ledger?limit=50");
-  const ledgerRows = (ledger.items || []).map((e) => `
-    <tr>
-      <td>${esc(fmtTime(e.created_at))}</td>
+  const ledgerRows = (ledger.items || []).map((e, i) => `
+    <tr class="user-ledger-row" style="--reveal:${i}">
+      <td class="user-when">${esc(fmtTime(e.created_at))}</td>
       <td class="mono">${esc(e.entry_type)}</td>
-      <td>${esc(e.amount)}</td>
-      <td>${esc(e.balance_after)}</td>
+      <td class="user-balance">${esc(e.amount)}</td>
+      <td class="user-balance">${esc(e.balance_after)}</td>
       <td>${esc(e.actor)}</td>
       <td>${esc(e.reason || "")}</td>
     </tr>`).join("") || `<tr><td colspan="6" class="empty">No ledger entries.</td></tr>`;
@@ -60,22 +183,77 @@ export async function renderUserDetail(el, appID, userID) {
     ? `<button type="button" class="danger" id="clear-debt">Clear debt</button>`
     : "";
 
+  const title = user.display_name || user.email || user.id;
+  const subtitle = user.email && user.display_name ? user.email : user.id;
+  const balClass = user.balance < 0 ? " user-dossier__balance--debt" : "";
+
   el.innerHTML = `
-    <h1>${esc(user.email || user.id)}</h1>
-    <p><a href="#/apps/${esc(appID)}/users">← Users</a></p>
-    <article>
-      <p><span class="muted">ID</span> <span class="mono">${esc(user.id)}</span></p>
-      <p><span class="muted">Status</span> ${esc(user.status)}
-        <button type="button" class="secondary" id="toggle-status">
-          ${user.status === "disabled" ? "Enable" : "Disable"}
-        </button>
-      </p>
-      <p><span class="muted">Balance</span> <strong>${esc(user.balance)}</strong> ${clearDebtBtn}</p>
-      <p><span class="muted">Display name</span> ${esc(user.display_name || "—")}</p>
-      <p><span class="muted">Created</span> ${esc(fmtTime(user.created_at))}</p>
-    </article>
-    <article>
-      <h2>Adjust credits</h2>
+    <p class="user-back"><a href="#/apps/${esc(appID)}/users">← Users</a></p>
+
+    <header class="user-dossier">
+      <div class="user-dossier__rail" aria-hidden="true">CASE</div>
+      <div class="user-dossier__avatar">
+        ${avatarThumb(user, "user-avatar--lg")}
+      </div>
+      <div class="user-dossier__body">
+        <div class="user-dossier__meta-line">
+          <span class="user-dossier__ref mono">REF ${esc(shortRef(user.id))}</span>
+          ${statusChip(user.status)}
+        </div>
+        <h1 class="user-dossier__title">${esc(title)}</h1>
+        <p class="user-dossier__sub">${esc(subtitle)}</p>
+        <div class="user-dossier__actions">
+          <button type="button" class="secondary" id="toggle-status">
+            ${user.status === "disabled" ? "Enable account" : "Disable account"}
+          </button>
+          ${clearDebtBtn}
+        </div>
+      </div>
+      <div class="user-dossier__balance${balClass}" aria-label="Credit balance">
+        <span class="user-dossier__balance-label">Balance</span>
+        <strong class="user-dossier__balance-value">${esc(user.balance)}</strong>
+        <span class="user-dossier__balance-hint">credits</span>
+      </div>
+    </header>
+
+    <section class="user-meta-grid" aria-label="Profile fields">
+      <div class="user-meta">
+        <span class="user-meta__k">User ID</span>
+        <span class="user-meta__v mono">${esc(user.id)}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Locale</span>
+        <span class="user-meta__v">${esc(user.locale || "—")}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Last IP</span>
+        <span class="user-meta__v mono">${esc(user.last_ip || "—")}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">UTM source</span>
+        <span class="user-meta__v">${esc(user.utm_source || "—")}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Last login</span>
+        <span class="user-meta__v">${esc(fmtTime(user.last_login_at))}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Created</span>
+        <span class="user-meta__v">${esc(fmtTime(user.created_at))}</span>
+      </div>
+      <div class="user-meta user-meta--wide">
+        <span class="user-meta__k">Avatar URL</span>
+        <span class="user-meta__v">${user.avatar_url
+          ? `<a href="${esc(user.avatar_url)}" target="_blank" rel="noopener">${esc(user.avatar_url)}</a>`
+          : "—"}</span>
+      </div>
+    </section>
+
+    <article class="user-adjust">
+      <div class="user-adjust__head">
+        <h2>Adjust credits</h2>
+        <span class="user-adjust__badge">manual</span>
+      </div>
       <form id="adjust">
         <div class="form-row">
           <div class="field"><label>Entry type</label>
@@ -88,15 +266,18 @@ export async function renderUserDetail(el, appID, userID) {
           <div class="field"><label>Reason</label><input name="reason" required maxlength="500"></div>
         </div>
         <div class="form-actions">
-          <button type="submit">Apply</button>
+          <button type="submit">Post entry</button>
         </div>
       </form>
     </article>
-    <h2>Ledger</h2>
-    <p class="muted"><a href="#/apps/${esc(appID)}/activity?view=ledger&user_id=${esc(userID)}">App ledger</a>
-      · <a href="#/apps/${esc(appID)}/activity?user_id=${esc(userID)}">App purchases</a></p>
-    <div class="table-wrap">
-    <table>
+
+    <div class="user-ledger-head">
+      <h2>Ledger</h2>
+      <p class="muted"><a href="#/apps/${esc(appID)}/activity?view=ledger&user_id=${esc(userID)}">App ledger</a>
+        · <a href="#/apps/${esc(appID)}/activity?user_id=${esc(userID)}">App purchases</a></p>
+    </div>
+    <div class="table-wrap user-ledger-wrap">
+    <table class="user-ledger">
       <thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Balance after</th><th>Actor</th><th>Reason</th></tr></thead>
       <tbody>${ledgerRows}</tbody>
     </table>

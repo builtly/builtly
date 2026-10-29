@@ -305,7 +305,7 @@ await api("POST", "/ai/consume", {
 |---|---|
 | `/account/login/` | Email + OAuth buttons |
 | `/auth/callback/` | OAuth exchange (no layout chrome needed) |
-| `/account/` | `GET /user/me` + balance |
+| `/account/` | `GET /user/me` (avatar / locale / last_ip / utm_source) + balance; `POST /user/me/avatar` → R2 PUT → `…/complete` |
 | `/pricing/` | `GET /products` + Buy |
 | `/billing/thanks/` | Post-checkout; refresh balance |
 

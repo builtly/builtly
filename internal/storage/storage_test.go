@@ -125,6 +125,7 @@ func setupStorage(t *testing.T) *storageHarness {
 	storSvc := storage.NewService(database, storage.NewStore(database), resolver, r2)
 	// Point all R2 traffic at the fake by rewriting endpoint via Create after binding — we inject via connection settings.
 	authSvc.SetFileMarker(storSvc)
+	authSvc.SetAvatarUploader(auth.StorageAvatars{Storage: storSvc})
 
 	stripeClient := stripeapi.New(http.DefaultClient)
 	catSvc := catalog.NewService(catalog.NewStore(database), resolver, stripeClient)
@@ -177,9 +178,18 @@ func (h *storageHarness) createApp(t *testing.T) tenant.App {
 
 func (h *storageHarness) createR2Conn(t *testing.T) string {
 	t.Helper()
+	return h.createR2ConnWithPublic(t, "")
+}
+
+func (h *storageHarness) createR2ConnWithPublic(t *testing.T, publicBase string) string {
+	t.Helper()
+	settings := map[string]any{"account_id": "acct", "bucket": "bucket"}
+	if publicBase != "" {
+		settings["public_base_url"] = publicBase
+	}
 	body, _ := json.Marshal(map[string]any{
 		"provider": "r2", "name": "r2",
-		"settings": map[string]any{"account_id": "acct", "bucket": "bucket"},
+		"settings": settings,
 		"secrets":  map[string]any{"access_key_id": "AKID", "secret_access_key": "SECRETSECRETSECRETSECRETSECR"},
 	})
 	req := httptest.NewRequest("POST", "/api/v1/admin/connections", bytes.NewReader(body))
@@ -328,6 +338,67 @@ func TestFilesQuotaAndType(t *testing.T) {
 	h.srv.Router().ServeHTTP(rr, req)
 	if rr.Code != 413 {
 		t.Fatalf("want file_too_large, got %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAvatarUploadToR2(t *testing.T) {
+	h := setupStorage(t)
+	app := h.createApp(t)
+	conn := h.createR2ConnWithPublic(t, "https://cdn.example.com")
+	h.bindR2(t, app.ID.String(), conn)
+	access, _ := h.register(t, app, "avatar@ex.com")
+
+	body, _ := json.Marshal(map[string]any{
+		"filename": "me.png", "content_type": "image/png", "size_bytes": 4,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/user/me/avatar", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("X-App-ID", app.ID.String())
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("create avatar: %d %s", rr.Code, rr.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &created)
+	file := created["file"].(map[string]any)
+	fileID := file["id"].(string)
+	upload := created["upload"].(map[string]any)
+	putURL := upload["url"].(string)
+	headers := upload["headers"].(map[string]any)
+
+	putReq, err := http.NewRequest(http.MethodPut, putURL, strings.NewReader("data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range headers {
+		putReq.Header.Set(k, v.(string))
+	}
+	putRes, err := http.DefaultClient.Do(putReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	putRes.Body.Close()
+	if putRes.StatusCode != 200 {
+		t.Fatalf("put: %d", putRes.StatusCode)
+	}
+
+	body, _ = json.Marshal(map[string]any{"file_id": fileID})
+	req = httptest.NewRequest("POST", "/api/v1/user/me/avatar/complete", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("X-App-ID", app.ID.String())
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("complete avatar: %d %s", rr.Code, rr.Body.String())
+	}
+	var me map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &me)
+	url, _ := me["avatar_url"].(string)
+	if !strings.HasPrefix(url, "https://cdn.example.com/acme/u/") || !strings.Contains(url, "/avatar/") {
+		t.Fatalf("avatar_url=%q", url)
 	}
 }
 

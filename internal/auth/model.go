@@ -17,6 +17,8 @@ type User struct {
 	PasswordHash    *string     `db:"password_hash" json:"-"`
 	DisplayName     string      `db:"display_name" json:"display_name"`
 	AvatarURL       string      `db:"avatar_url" json:"avatar_url"`
+	Locale          string      `db:"locale" json:"locale"`
+	LastIP          string      `db:"last_ip" json:"last_ip"`
 	Status          string      `db:"status" json:"status"`
 	Attribution     []byte      `db:"attribution" json:"-"`
 	ReferralCode    *string     `db:"referral_code" json:"referral_code,omitempty"`
@@ -156,6 +158,9 @@ type MeResponse struct {
 	EmailVerified bool         `json:"email_verified"`
 	DisplayName   string       `json:"display_name"`
 	AvatarURL     string       `json:"avatar_url"`
+	Locale        string       `json:"locale"`
+	LastIP        string       `json:"last_ip"`
+	UTMSource     string       `json:"utm_source"`
 	Identities    []MeIdentity `json:"identities"`
 	HasPassword   bool         `json:"has_password"`
 	CreatedAt     db.Time      `json:"created_at"`

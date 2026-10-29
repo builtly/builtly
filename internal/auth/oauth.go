@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -153,6 +154,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 		if provider.IsEmailRequired(err) {
 			return oauthErrRedirect(flow.RedirectURI, "email_required"), nil
 		}
+		slog.Warn("oauth provider exchange failed", "provider", providerName, "app_id", flow.AppID, "err", err)
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
 	if appleUserName != "" && ident.Name == "" {
@@ -161,6 +163,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 
 	app, err := s.oauth.Tenants.Get(ctx, flow.AppID)
 	if err != nil {
+		slog.Warn("oauth app load failed", "provider", providerName, "app_id", flow.AppID, "err", err)
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
 	user, isNew, err := s.resolveIdentity(ctx, app, ident, flow.Attribution, flow.ReferralCode)
@@ -172,6 +175,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 		if errors.Is(err, ErrEmailRequired) {
 			return oauthErrRedirect(flow.RedirectURI, "email_required"), nil
 		}
+		slog.Warn("oauth resolve identity failed", "provider", providerName, "app_id", flow.AppID, "err", err)
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
 	_ = isNew

@@ -237,7 +237,8 @@ func (s *Service) MarkDeletedForUser(ctx context.Context, tx *sqlx.Tx, appID, us
 
 type r2Resolved struct {
 	R2Config
-	connectionID string
+	PublicBaseURL string
+	connectionID  string
 }
 
 func (s *Service) r2Config(ctx context.Context, appID uuid.UUID) (r2Resolved, error) {
@@ -264,6 +265,7 @@ func (s *Service) r2Config(ctx context.Context, appID uuid.UUID) (r2Resolved, er
 	}
 	account, _ := settings["account_id"].(string)
 	bucket, _ := settings["bucket"].(string)
+	publicBase, _ := settings["public_base_url"].(string)
 	if account == "" || bucket == "" || sec.AccessKeyID == "" || sec.SecretAccessKey == "" {
 		return r2Resolved{}, ErrIntegrationNotConfigured
 	}
@@ -273,8 +275,116 @@ func (s *Service) r2Config(ctx context.Context, appID uuid.UUID) (r2Resolved, er
 			AccessKeyID: sec.AccessKeyID, SecretAccessKey: sec.SecretAccessKey,
 			KeyPrefix: prefix, Endpoint: s.testEndpoint,
 		},
-		connectionID: resolved.ConnectionID,
+		PublicBaseURL: strings.TrimSpace(publicBase),
+		connectionID:  resolved.ConnectionID,
 	}, nil
+}
+
+// MaxAvatarBytes is the hard cap for profile avatars.
+const MaxAvatarBytes int64 = 2 << 20
+
+var avatarContentTypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/webp": true,
+	"image/gif":  true,
+}
+
+func avatarFilename(filename, contentType string) string {
+	filename = strings.TrimSpace(filename)
+	if filename != "" && path.Base(filename) == filename && !strings.Contains(filename, "..") {
+		return filename
+	}
+	switch contentType {
+	case "image/jpeg":
+		return "avatar.jpg"
+	case "image/webp":
+		return "avatar.webp"
+	case "image/gif":
+		return "avatar.gif"
+	default:
+		return "avatar.png"
+	}
+}
+
+// CreateAvatar reserves a pending avatar upload (image-only, ≤ MaxAvatarBytes).
+func (s *Service) CreateAvatar(ctx context.Context, app tenant.App, userID uuid.UUID, in CreateInput) (CreateResult, error) {
+	in.ContentType = strings.TrimSpace(strings.ToLower(in.ContentType))
+	if i := strings.IndexByte(in.ContentType, ';'); i >= 0 {
+		in.ContentType = strings.TrimSpace(in.ContentType[:i])
+	}
+	in.Filename = avatarFilename(in.Filename, in.ContentType)
+	if in.ContentType == "" || in.SizeBytes <= 0 {
+		return CreateResult{}, ErrValidationFailed
+	}
+	if !avatarContentTypes[in.ContentType] {
+		return CreateResult{}, ErrContentTypeNotAllowed.WithDetails(map[string]any{"reason": "avatar must be png, jpeg, webp, or gif"})
+	}
+	st := app.Settings.Storage
+	maxBytes := MaxAvatarBytes
+	if st.MaxFileBytes > 0 && st.MaxFileBytes < maxBytes {
+		maxBytes = st.MaxFileBytes
+	}
+	if in.SizeBytes > maxBytes {
+		return CreateResult{}, ErrFileTooLarge
+	}
+	if len(st.AllowedContentTypes) > 0 && !allowedType(st.AllowedContentTypes, in.ContentType) {
+		return CreateResult{}, ErrContentTypeNotAllowed
+	}
+	cfg, err := s.r2Config(ctx, app.ID)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	used, err := s.store.SumUsageBytes(ctx, nil, app.ID, userID)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	if st.UserQuotaBytes > 0 && used+in.SizeBytes > st.UserQuotaBytes {
+		return CreateResult{}, ErrQuotaExceeded
+	}
+
+	now := db.Time(s.now().UTC())
+	fileID := uuid.Must(uuid.NewV7())
+	key := cfg.KeyPrefix + "/u/" + userID.String() + "/avatar/" + fileID.String()
+	f := File{
+		ID: fileID, AppID: app.ID, UserID: userID, ConnectionID: cfg.connectionID,
+		Bucket: cfg.Bucket, ObjectKey: key, Filename: in.Filename, ContentType: in.ContentType,
+		SizeBytes: in.SizeBytes, Status: StatusPending, CreatedAt: now,
+	}
+	if err := s.store.Insert(ctx, nil, f); err != nil {
+		return CreateResult{}, err
+	}
+	url, headers, exp, err := s.r2.PresignPUT(cfg.R2Config, key, in.ContentType, 15*time.Minute, s.now().UTC())
+	if err != nil {
+		return CreateResult{}, ErrUpstream.WithDetails(map[string]any{"reason": err.Error()})
+	}
+	var out CreateResult
+	out.File = f
+	out.Upload.Method = "PUT"
+	out.Upload.URL = url
+	out.Upload.Headers = headers
+	out.Upload.ExpiresAt = exp
+	return out, nil
+}
+
+// CompleteAvatar verifies the upload and returns a public CDN URL (requires public_base_url).
+func (s *Service) CompleteAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (string, error) {
+	f, err := s.Complete(ctx, app, userID, fileID)
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(f.ObjectKey, "/avatar/") {
+		return "", ErrValidationFailed.WithDetails(map[string]any{"reason": "not an avatar upload"})
+	}
+	cfg, err := s.r2Config(ctx, app.ID)
+	if err != nil {
+		return "", err
+	}
+	if cfg.PublicBaseURL == "" {
+		return "", ErrValidationFailed.WithDetails(map[string]any{"reason": "public_base_url required for avatars"})
+	}
+	base := strings.TrimRight(cfg.PublicBaseURL, "/")
+	return base + "/" + strings.TrimPrefix(f.ObjectKey, "/"), nil
 }
 
 func allowedType(allow []string, ct string) bool {

@@ -92,6 +92,18 @@ func (d *DB) Rebind(q string) string {
 	return d.DB.Rebind(q)
 }
 
+// BoolArg returns a driver-appropriate boolean bind value.
+// SQLite stores booleans as INTEGER 0/1; Postgres expects a real bool.
+func (d *DB) BoolArg(v bool) any {
+	if d.Driver == "sqlite" {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	return v
+}
+
 // WithTx runs fn inside a transaction; commits on nil, rolls back on error or panic.
 func (d *DB) WithTx(ctx context.Context, fn func(tx *sqlx.Tx) error) (err error) {
 	tx, err := d.BeginTxx(ctx, nil)

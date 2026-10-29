@@ -26,6 +26,7 @@ func TestPatchMeAndRequestVerify(t *testing.T) {
 	app := h.createApp(t, "profile", false, 0)
 	rr := h.do("POST", "/api/v1/auth/register", app.ID.String(), "", map[string]any{
 		"email": "p@ex.com", "password": "password123", "display_name": "Old",
+		"locale": "en-US", "attribution": map[string]any{"utm_source": "newsletter"},
 	})
 	if rr.Code != 201 {
 		t.Fatalf("register: %d %s", rr.Code, rr.Body.String())
@@ -35,15 +36,21 @@ func TestPatchMeAndRequestVerify(t *testing.T) {
 	access := reg["tokens"].(map[string]any)["access_token"].(string)
 
 	rr = h.do("PATCH", "/api/v1/user/me", app.ID.String(), access, map[string]any{
-		"display_name": "New Name", "avatar_url": "https://cdn.example/a.png",
+		"display_name": "New Name", "avatar_url": "https://cdn.example/a.png", "locale": "zh-CN",
 	})
 	if rr.Code != 200 {
 		t.Fatalf("patch: %d %s", rr.Code, rr.Body.String())
 	}
 	var me map[string]any
 	_ = json.Unmarshal(rr.Body.Bytes(), &me)
-	if me["display_name"] != "New Name" {
-		t.Fatalf("display_name=%v", me["display_name"])
+	if me["display_name"] != "New Name" || me["locale"] != "zh-CN" || me["avatar_url"] != "https://cdn.example/a.png" {
+		t.Fatalf("me=%v", me)
+	}
+	if me["utm_source"] != "newsletter" {
+		t.Fatalf("utm_source=%v", me["utm_source"])
+	}
+	if _, ok := me["last_ip"]; !ok {
+		t.Fatalf("missing last_ip: %v", me)
 	}
 
 	rr = h.do("POST", "/api/v1/auth/email/verify/request", app.ID.String(), access, map[string]any{})

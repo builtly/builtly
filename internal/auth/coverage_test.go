@@ -310,19 +310,19 @@ func TestAuthStoreAdminHelpers(t *testing.T) {
 	if err := store.Insert(context.Background(), nil, u); err != nil {
 		t.Fatal(err)
 	}
-	all, err := store.List(context.Background(), nil, app.ID, "", "", 0)
+	all, err := store.List(context.Background(), nil, app.ID, "", "", 0, db.Time{}, uuid.Nil)
 	if err != nil || len(all) != 1 {
 		t.Fatalf("list: %v n=%d", err, len(all))
 	}
-	byQ, err := store.List(context.Background(), nil, app.ID, "s@", "", 10)
+	byQ, err := store.List(context.Background(), nil, app.ID, "s@", "", 10, db.Time{}, uuid.Nil)
 	if err != nil || len(byQ) != 1 {
 		t.Fatalf("query: %v", err)
 	}
-	byS, err := store.List(context.Background(), nil, app.ID, "", auth.StatusActive, 10)
+	byS, err := store.List(context.Background(), nil, app.ID, "", auth.StatusActive, 10, db.Time{}, uuid.Nil)
 	if err != nil || len(byS) != 1 {
 		t.Fatalf("status: %v", err)
 	}
-	both, err := store.List(context.Background(), nil, app.ID, "s@", auth.StatusActive, 10)
+	both, err := store.List(context.Background(), nil, app.ID, "s@", auth.StatusActive, 10, db.Time{}, uuid.Nil)
 	if err != nil || len(both) != 1 {
 		t.Fatalf("both: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestDeleteMeReauthAndPatchNotFound(t *testing.T) {
 		t.Fatal("want invalid credentials")
 	}
 	name := "x"
-	if _, err := h.authSvc.PatchMe(context.Background(), app.ID, uuid.Must(uuid.NewV7()), &name, nil); err == nil {
+	if _, err := h.authSvc.PatchMe(context.Background(), app.ID, uuid.Must(uuid.NewV7()), &name, nil, nil); err == nil {
 		t.Fatal("want user not found")
 	}
 }

@@ -528,6 +528,8 @@ CREATE TABLE users (
     password_hash      TEXT NULL,                     -- argon2id PHC; NULL = no password sign-in
     display_name       TEXT NOT NULL DEFAULT '',
     avatar_url         TEXT NOT NULL DEFAULT '',
+    locale             TEXT NOT NULL DEFAULT '',      -- BCP 47 tag; set on register/PATCH
+    last_ip            TEXT NOT NULL DEFAULT '',      -- updated on login / token refresh
     status             TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'deleted')),
     attribution        JSONB NOT NULL DEFAULT '{}',   -- first-touch: {"affiliate_ref":"…","utm_source":"…"}
     referral_code      TEXT NULL,                     -- this user's own code; generated at creation; NULL after deletion
@@ -974,7 +976,7 @@ Apple's first callback also yields the user's name → set `display_name` only w
 
 #### 3.2.6 Account deletion (required by App Store Review Guideline 5.1.1(v))
 
-`DELETE /user/me` in one transaction: status `deleted`, `deleted_at`, `email = NULL`, `password_hash = NULL`, `display_name = ''`, `attribution = '{}'`, delete `user_identities` (after reading Apple refresh tokens), revoke refresh tokens, mark files for purge, set `referral_code = NULL`, void the user's own referral as referee (`void_reason = "referee_deleted"`); publish `user.deleted` → subscribers `auth.apple_revoke` (calls `appleid.apple.com/auth/revoke`) and `storage.purge` (deletes R2 objects). Ledger and purchases are retained as financial records referencing the anonymized user ID.
+`DELETE /user/me` in one transaction: status `deleted`, `deleted_at`, `email = NULL`, `password_hash = NULL`, `display_name = ''`, `avatar_url = ''`, `locale = ''`, `last_ip = ''`, `attribution = '{}'`, delete `user_identities` (after reading Apple refresh tokens), revoke refresh tokens, mark files for purge, set `referral_code = NULL`, void the user's own referral as referee (`void_reason = "referee_deleted"`); publish `user.deleted` → subscribers `auth.apple_revoke` (calls `appleid.apple.com/auth/revoke`) and `storage.purge` (deletes R2 objects). Ledger and purchases are retained as financial records referencing the anonymized user ID.
 
 ### 3.3 Transactional email (Resend)
 
@@ -1352,6 +1354,8 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 | POST | `/api/v1/auth/apple` · `/api/v1/auth/google` | tenant | |
 | **User** | | user | 4.4 |
 | GET, PATCH, DELETE | `/api/v1/user/me` | | |
+| POST | `/api/v1/user/me/avatar` | | |
+| POST | `/api/v1/user/me/avatar/complete` | | |
 | GET | `/api/v1/user/credits` · `/api/v1/user/credits/ledger` | | |
 | GET | `/api/v1/user/referral` · `/api/v1/user/referral/referees` | | |
 | POST | `/api/v1/user/referral/apply` | | |
@@ -1405,8 +1409,10 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 
 | Endpoint | Request | Response |
 |---|---|---|
-| `GET /user/me` | — | `{id, email, email_verified, display_name, avatar_url, identities: [{provider, email}], has_password, created_at}` |
-| `PATCH /user/me` | `{display_name?, avatar_url?}` | updated user |
+| `GET /user/me` | — | `{id, email, email_verified, display_name, avatar_url, locale, last_ip, utm_source, identities: [{provider, email}], has_password, created_at}` |
+| `PATCH /user/me` | `{display_name?, avatar_url?, locale?}` | updated user |
+| `POST /user/me/avatar` | `{filename?, content_type, size_bytes}` | `{file, upload}` — image only (png/jpeg/webp/gif), ≤ 2 MiB; R2 must be bound |
+| `POST /user/me/avatar/complete` | `{file_id}` | updated me; sets `avatar_url` to `{public_base_url}/{object_key}` (R2 connection needs `public_base_url`) |
 | `DELETE /user/me` | `{password?}` — required if the user has a password and the access token is older than 5 min (re-auth) | 204; §3.2.6 |
 | `GET /user/credits` | — | `{balance: 250, updated_at}` (balance may be negative) |
 | `GET /user/credits/ledger` | `?limit&cursor` | `{items: [{id, entry_type, amount, balance_after, reference_type, reference_id, metadata, created_at}], next_cursor}` |

@@ -71,8 +71,6 @@ function shellHTML(parts, apps) {
   const appID = inApp ? parts[1] : getCurrentAppID();
   const current = apps.find((a) => a.id === appID) || null;
   const section = sectionFromParts(parts);
-  const platform = parts[0] === "connections" || parts[0] === "outbox" || parts[0] === "audit"
-    || (parts[0] === "apps" && !parts[1]);
 
   const switcherOpts = [
     `<option value="">Select an app…</option>`,
@@ -118,13 +116,6 @@ function shellHTML(parts, apps) {
       <button type="button" class="secondary outline logout" id="logout-btn">Log out</button>
     </aside>
     <div class="main">
-      ${current && !platform ? `
-        <div class="topbar">
-          <div class="topbar-app">
-            <strong>${esc(current.name)}</strong>
-            <span class="mono muted">${esc(current.slug)}</span>
-          </div>
-        </div>` : ""}
       <p id="banner" class="banner" role="status" hidden></p>
       <div id="view"></div>
     </div>`;
