@@ -373,7 +373,11 @@ func (h *Handler) listConnections(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	resp := map[string]any{"items": items}
+	if u := h.integ.ProviderRedirectURL(provider); u != "" {
+		resp["redirect_url"] = u
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) createConnection(w http.ResponseWriter, r *http.Request) {

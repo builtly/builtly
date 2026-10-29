@@ -45,14 +45,15 @@ type Resolved struct {
 
 // PublicConnection is the API-safe view with masked secrets.
 type PublicConnection struct {
-	ID         string          `json:"id"`
-	Provider   string          `json:"provider"`
-	Name       string          `json:"name"`
-	Settings   json.RawMessage `json:"settings"`
-	Secrets    json.RawMessage `json:"secrets"` // masked hints only
-	WebhookURL string          `json:"webhook_url,omitempty"`
-	UsedByApps []uuid.UUID     `json:"used_by_apps"`
-	ReadOnly   bool            `json:"read_only,omitempty"`
-	CreatedAt  db.Time         `json:"created_at"`
-	UpdatedAt  db.Time         `json:"updated_at"`
+	ID          string          `json:"id"`
+	Provider    string          `json:"provider"`
+	Name        string          `json:"name"`
+	Settings    json.RawMessage `json:"settings"`
+	Secrets     json.RawMessage `json:"secrets"` // masked hints only
+	WebhookURL  string          `json:"webhook_url,omitempty"`
+	RedirectURL string          `json:"redirect_url,omitempty"`
+	UsedByApps  []uuid.UUID     `json:"used_by_apps"`
+	ReadOnly    bool            `json:"read_only,omitempty"`
+	CreatedAt   db.Time         `json:"created_at"`
+	UpdatedAt   db.Time         `json:"updated_at"`
 }

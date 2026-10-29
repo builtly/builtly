@@ -291,5 +291,32 @@ func (s *Service) toPublic(ctx context.Context, c Connection, plain []byte) (Pub
 	if c.Provider == ProviderAppleIAP && s.publicURL != "" {
 		pc.WebhookURL = fmt.Sprintf("%s/api/v1/webhooks/apple/%s", s.publicURL, c.ID)
 	}
+	pc.RedirectURL = OAuthRedirectURL(s.publicURL, c.Provider)
 	return pc, nil
+}
+
+// ProviderRedirectURL is the OAuth callback for provider, or empty when it does not apply.
+func (s *Service) ProviderRedirectURL(provider string) string {
+	return OAuthRedirectURL(s.publicURL, provider)
+}
+
+// OAuthRedirectURL is the provider callback registered in Google, GitHub, or Apple.
+// It is identical for every app and connection of that provider.
+func OAuthRedirectURL(publicURL, provider string) string {
+	publicURL = strings.TrimRight(strings.TrimSpace(publicURL), "/")
+	if publicURL == "" {
+		return ""
+	}
+	var name string
+	switch provider {
+	case ProviderGoogleOAuth:
+		name = "google"
+	case ProviderGitHubOAuth:
+		name = "github"
+	case ProviderAppleSignIn:
+		name = "apple"
+	default:
+		return ""
+	}
+	return publicURL + "/api/v1/auth/oauth/" + name + "/callback"
 }

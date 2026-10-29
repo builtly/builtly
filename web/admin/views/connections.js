@@ -136,6 +136,14 @@ const PROVIDER_GROUPS = [
 
 const PROVIDERS = PROVIDER_GROUPS.flatMap((g) => g.providers);
 
+/** OAuth providers register one callback derived from BUILTLY_PUBLIC_URL. */
+const REDIRECT_PROVIDERS = new Set(["google_oauth", "github_oauth", "apple_signin"]);
+
+function copyButton(url, copied) {
+  if (!url) return `<span class="user-empty">—</span>`;
+  return `<button type="button" class="conn-copy copy-url" data-url="${esc(url)}" data-copied="${esc(copied)}" title="${esc(url)}">Copy</button>`;
+}
+
 function linesToArray(raw) {
   return String(raw || "")
     .split(/\r?\n/)
@@ -309,7 +317,7 @@ function providerNav(active) {
   </div>`;
 }
 
-function formMarkup(schema, { mode, values }) {
+function formMarkup(schema, { mode, values, redirectURL }) {
   const forEdit = mode === "edit";
   let st = values || {};
   if (schema === SCHEMAS.google_oauth) st = normalizeGoogleSettings(st);
@@ -349,7 +357,15 @@ function formMarkup(schema, { mode, values }) {
     }
   }
 
+  const redirect = redirectURL
+    ? `<div class="field">
+        <label>Redirect URL</label>
+        ${copyButton(redirectURL, "Redirect URL")}
+      </div>`
+    : "";
+
   return `
+    ${redirect}
     <div class="field">
       <label for="conn-name">Name</label>
       <input id="conn-name" name="name" required value="${esc(st.name || "")}" placeholder="${esc(schema.label)} production" autocomplete="off">
@@ -418,6 +434,10 @@ export async function renderConnections(el) {
 
   const data = await api("GET", "/connections?provider=" + encodeURIComponent(provider));
   const items = data.items || [];
+  const showRedirect = REDIRECT_PROVIDERS.has(provider);
+  const redirectURL = data.redirect_url || "";
+  const linkLabel = showRedirect ? "Redirect URL" : "Webhook";
+  const copiedLabel = showRedirect ? "Redirect URL" : "Webhook URL";
 
   const rows = items.map((c, i) => {
     const usedN = (c.used_by_apps || []).length;
@@ -429,9 +449,8 @@ export async function renderConnections(el) {
           <button type="button" class="conn-edit edit-conn" data-id="${esc(c.id)}">Edit</button>
           <button type="button" class="conn-del del-conn" data-id="${esc(c.id)}">Delete</button>
         </div>`;
-    const webhook = c.webhook_url
-      ? `<button type="button" class="conn-copy copy-url" data-url="${esc(c.webhook_url)}" title="${esc(c.webhook_url)}">Copy URL</button>`
-      : `<span class="user-empty">—</span>`;
+    const linkURL = showRedirect ? (c.redirect_url || redirectURL) : c.webhook_url;
+    const webhook = copyButton(linkURL, copiedLabel);
     return `<tr class="conn-row" data-conn-id="${esc(c.id)}" data-reveal="${i}">
       <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
       <td>
@@ -472,7 +491,7 @@ export async function renderConnections(el) {
                 <th>Name</th>
                 <th>Config</th>
                 <th>Secrets</th>
-                <th>Webhook</th>
+                <th>${esc(linkLabel)}</th>
                 <th>Used by</th>
                 <th></th>
               </tr>
@@ -482,13 +501,14 @@ export async function renderConnections(el) {
         </div>`
       : `<div class="conn-empty">
           <p>No ${esc(schema.label)} connections yet.</p>
+          ${showRedirect && redirectURL ? `<p>${copyButton(redirectURL, copiedLabel)}</p>` : ""}
           <button type="button" class="conn-create" id="conn-add-empty">Add the first one</button>
         </div>`}`;
 
   applyRevealDelays(el, ".conn-row[data-reveal]");
 
   const openCreate = () => {
-    openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {} })}</form>`);
+    openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {}, redirectURL: showRedirect ? redirectURL : "" })}</form>`);
     el.querySelector("#create-conn").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const { name, settings, secrets } = collectPayload(ev.target, schema, { requireSecrets: true });
@@ -507,7 +527,7 @@ export async function renderConnections(el) {
       openDrawer(
         el,
         `Edit ${c.name}`,
-        `<form id="edit-conn">${formMarkup(schema, { mode: "edit", values: { name: c.name, ...(c.settings || {}) } })}</form>`,
+        `<form id="edit-conn">${formMarkup(schema, { mode: "edit", values: { name: c.name, ...(c.settings || {}) }, redirectURL: showRedirect ? (c.redirect_url || redirectURL) : "" })}</form>`,
       );
       el.querySelector("#edit-conn").addEventListener("submit", async (ev) => {
         ev.preventDefault();
@@ -535,16 +555,20 @@ export async function renderConnections(el) {
     });
   });
 
-  el.querySelectorAll(".copy-url").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+  if (!el.dataset.copyBound) {
+    el.dataset.copyBound = "1";
+    el.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest(".copy-url");
+      if (!btn || !el.contains(btn)) return;
+      const label = btn.dataset.copied || "URL";
       try {
         await navigator.clipboard.writeText(btn.dataset.url);
-        showOk("Webhook URL copied");
+        showOk(label + " copied");
       } catch {
         showOk(btn.dataset.url);
       }
     });
-  });
+  }
 
   if (editID) {
     const editBtn = el.querySelector(`.edit-conn[data-id="${CSS.escape(editID)}"]`);
