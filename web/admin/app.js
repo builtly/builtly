@@ -96,10 +96,41 @@ function shellHTML(parts, apps) {
       <p class="nav-hint">Create or select an app to configure auth, billing, and keys.</p>
     `;
 
+  const appSlug = current ? current.slug : "";
+  const appPickerItems = apps.length
+    ? apps.map((a) => {
+      const on = current && a.id === current.id;
+      return `<button type="button" class="app-picker__item${on ? " app-picker__item--current" : ""}"
+          data-app-id="${esc(a.id)}" role="option" aria-selected="${on ? "true" : "false"}">
+          <span class="app-picker__name">${esc(a.name)}</span>
+          <span class="app-picker__slug">${esc(a.slug)}</span>
+        </button>`;
+    }).join("")
+    : `<p class="nav-hint">Create an app from All apps to get started.</p>`;
+
   return `
-    <aside class="sidebar">
-      <div class="brand">Builtly admin</div>
-      <label class="app-switcher">
+    <header class="mobile-bar">
+      <button type="button" class="mobile-bar__menu" id="sidebar-open"
+        aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">
+        <span class="mobile-bar__burger" aria-hidden="true"></span>
+      </button>
+      <div class="mobile-bar__brand">
+        Builtly <span class="mobile-bar__mark">admin</span>
+      </div>
+      ${appSlug
+        ? `<button type="button" class="mobile-bar__app" id="mobile-app-chip" aria-haspopup="dialog" aria-controls="app-sheet" aria-expanded="false">${esc(appSlug)}</button>`
+        : `<span class="mobile-bar__app mobile-bar__app--empty"></span>`}
+    </header>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__head">
+        <div class="brand">
+          <span class="brand__name">Builtly</span>
+          <span class="brand__mark">admin</span>
+        </div>
+        <button type="button" class="sidebar__close" id="sidebar-close" aria-label="Close menu">✕</button>
+      </div>
+      <label class="app-switcher app-switcher--select">
         <span>Current app</span>
         <select id="app-switcher" ${apps.length ? "" : "disabled"}>
           ${switcherOpts}
@@ -113,19 +144,126 @@ function shellHTML(parts, apps) {
         ${navLink("#/outbox", "Outbox", parts[0] === "outbox")}
         ${navLink("#/audit", "Audit log", parts[0] === "audit")}
       </div>
-      <button type="button" class="secondary outline logout" id="logout-btn">Log out</button>
+      <button type="button" class="logout" id="logout-btn">Log out</button>
     </aside>
+    <div class="app-sheet-backdrop" id="app-sheet-backdrop" hidden></div>
+    <div class="app-sheet" id="app-sheet" role="dialog" aria-modal="true" aria-labelledby="app-sheet-title" hidden>
+      <div class="app-sheet__head">
+        <h2 class="app-sheet__title" id="app-sheet-title">Switch app</h2>
+        <button type="button" class="app-sheet__close" id="app-sheet-close" aria-label="Close">✕</button>
+      </div>
+      <div class="app-picker app-picker--sheet" role="listbox" aria-label="Apps">
+        <div class="app-picker__list">${appPickerItems}</div>
+      </div>
+      <a class="app-sheet__all" href="#/apps">Manage all apps</a>
+    </div>
     <div class="main">
       <p id="banner" class="banner" role="status" hidden></p>
       <div id="view"></div>
     </div>`;
 }
 
+/** @type {AbortController|null} */
+let sidebarAbort = null;
+
+function switchApp(parts, appID) {
+  if (!appID) {
+    setCurrentAppID("");
+    location.hash = "#/apps";
+    return;
+  }
+  setCurrentAppID(appID);
+  // Prefer keeping the current app section; from platform pages open Integrations.
+  let section = "config";
+  if (parts[0] === "apps" && parts[1]) section = sectionFromParts(parts);
+  location.hash = hashForApp(appID, section);
+}
+
+function wireChrome(layout, parts) {
+  const openBtn = document.getElementById("sidebar-open");
+  const closeBtn = document.getElementById("sidebar-close");
+  const navBackdrop = document.getElementById("sidebar-backdrop");
+  const appChip = document.getElementById("mobile-app-chip");
+  const appSheet = document.getElementById("app-sheet");
+  const appSheetBackdrop = document.getElementById("app-sheet-backdrop");
+  const appSheetClose = document.getElementById("app-sheet-close");
+  if (!layout || !openBtn || !closeBtn || !navBackdrop || !appSheet || !appSheetBackdrop) return;
+
+  if (sidebarAbort) sidebarAbort.abort();
+  sidebarAbort = new AbortController();
+  const { signal } = sidebarAbort;
+
+  const setNavOpen = (open) => {
+    layout.classList.toggle("layout--nav-open", open);
+    openBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    navBackdrop.hidden = !open;
+    if (open) {
+      layout.classList.remove("layout--app-sheet-open");
+      appSheet.hidden = true;
+      appSheetBackdrop.hidden = true;
+      appChip?.setAttribute("aria-expanded", "false");
+    }
+    document.documentElement.classList.toggle(
+      "nav-lock",
+      open || layout.classList.contains("layout--app-sheet-open"),
+    );
+  };
+
+  const setAppSheetOpen = (open) => {
+    layout.classList.toggle("layout--app-sheet-open", open);
+    appSheet.hidden = !open;
+    appSheetBackdrop.hidden = !open;
+    appChip?.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      layout.classList.remove("layout--nav-open");
+      openBtn.setAttribute("aria-expanded", "false");
+      navBackdrop.hidden = true;
+    }
+    document.documentElement.classList.toggle(
+      "nav-lock",
+      open || layout.classList.contains("layout--nav-open"),
+    );
+  };
+
+  setNavOpen(false);
+  setAppSheetOpen(false);
+
+  openBtn.addEventListener("click", () => setNavOpen(true), { signal });
+  closeBtn.addEventListener("click", () => setNavOpen(false), { signal });
+  navBackdrop.addEventListener("click", () => setNavOpen(false), { signal });
+  layout.querySelectorAll(".side-nav a").forEach((a) => {
+    a.addEventListener("click", () => setNavOpen(false), { signal });
+  });
+
+  appChip?.addEventListener("click", () => setAppSheetOpen(true), { signal });
+  appSheetClose?.addEventListener("click", () => setAppSheetOpen(false), { signal });
+  appSheetBackdrop.addEventListener("click", () => setAppSheetOpen(false), { signal });
+  appSheet.querySelector(".app-sheet__all")?.addEventListener("click", () => setAppSheetOpen(false), { signal });
+
+  layout.querySelectorAll(".app-picker__item[data-app-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-app-id") || "";
+      setAppSheetOpen(false);
+      setNavOpen(false);
+      switchApp(parts, id);
+    }, { signal });
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (layout.classList.contains("layout--app-sheet-open")) setAppSheetOpen(false);
+    else if (layout.classList.contains("layout--nav-open")) setNavOpen(false);
+  }, { signal });
+}
+
 async function renderShell(parts) {
   const apps = await loadApps();
+  document.documentElement.classList.remove("nav-lock");
   root.innerHTML = `<div class="layout">${shellHTML(parts, apps)}</div>`;
   bannerEl = document.getElementById("banner");
   mainEl = document.getElementById("view");
+  const layout = root.querySelector(".layout");
+  wireChrome(layout, parts);
 
   document.getElementById("logout-btn").addEventListener("click", () => {
     clearToken();
@@ -136,19 +274,7 @@ async function renderShell(parts) {
   });
 
   const switcher = document.getElementById("app-switcher");
-  switcher.addEventListener("change", () => {
-    const id = switcher.value;
-    if (!id) {
-      setCurrentAppID("");
-      location.hash = "#/apps";
-      return;
-    }
-    setCurrentAppID(id);
-    // Prefer keeping the current app section; from platform pages open Integrations.
-    let section = "config";
-    if (parts[0] === "apps" && parts[1]) section = sectionFromParts(parts);
-    location.hash = hashForApp(id, section);
-  });
+  switcher.addEventListener("change", () => switchApp(parts, switcher.value));
 
   hydrate(root);
 }

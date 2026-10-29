@@ -14,11 +14,19 @@
   --pico-nav-element-spacing-vertical: 0.5rem;
   --pico-nav-element-spacing-horizontal: 0.5rem;
 
-  --admin-sidebar: 14rem;
-  --admin-sidebar-bg: #111827;
-  --admin-sidebar-fg: #e5e7eb;
+  --admin-sidebar: 15rem;
+  --admin-sidebar-bg: #1a1f2b;
+  --admin-sidebar-fg: #e8e6df;
+  --admin-sidebar-muted: #9aa1b0;
+  --admin-sidebar-line: #2f3648;
+  --admin-amber: #c45c16;
   --admin-sans: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, sans-serif;
   --admin-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+}
+
+html.nav-lock,
+html.nav-lock body {
+  overflow: hidden;
 }
 
 /* Pico defaults h1=2rem / h2=1.75rem with large top spacing — too big for admin chrome. */
@@ -53,6 +61,16 @@ body > #app {
   grid-template-columns: var(--admin-sidebar) 1fr;
   min-height: 100vh;
   align-items: start; /* sidebar height ≠ main content height */
+  font-family: var(--admin-sans);
+}
+
+/* Mobile-only chrome — hidden on desktop */
+.mobile-bar,
+.sidebar-backdrop,
+.sidebar__close,
+.app-sheet,
+.app-sheet-backdrop {
+  display: none;
 }
 
 /*
@@ -66,33 +84,66 @@ body > #app {
   height: 100vh;
   height: 100dvh;
   box-sizing: border-box;
-  background: var(--admin-sidebar-bg);
+  background:
+    linear-gradient(90deg, rgba(196, 92, 22, 0.12) 0, rgba(196, 92, 22, 0.12) 0.28rem, transparent 0.28rem),
+    var(--admin-sidebar-bg);
   color: var(--admin-sidebar-fg);
-  padding: 1.25rem 1rem 1.5rem;
+  border-right: 1.5px solid #0f131c;
+  padding: 1.1rem 0.9rem 1.15rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.65rem;
   min-width: 0;
   overflow: hidden; /* .side-nav scrolls independently */
+  font-family: var(--admin-sans);
+  z-index: 40;
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 .sidebar .brand {
-  flex: 0 0 auto;
-  font-weight: 700;
-  font-size: 1.15rem;
-  letter-spacing: 0.02em;
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.5rem;
   color: #fff;
+}
+
+.brand__name {
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.brand__mark {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border: 1.5px solid #f3f1eb;
+  border-radius: 0.1rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f3f1eb;
+  transform: rotate(-1.5deg);
 }
 
 .app-switcher {
   display: block;
   flex: 0 0 auto;
   margin: 0;
-  color: #94a3b8;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  color: var(--admin-sidebar-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   width: auto;
   cursor: default;
@@ -109,26 +160,33 @@ body > #app {
   max-width: 100%;
   margin: 0;
   padding: 0.45rem 0.55rem;
-  border-radius: 0.35rem;
-  border: 1px solid #374151;
-  background: #0b1220;
-  color: #f3f4f6;
+  border-radius: 0.1rem;
+  border: 1.5px solid var(--admin-sidebar-line);
+  background: #121722;
+  color: #f3f1eb;
+  font-family: inherit;
   font-size: 0.88rem;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
   line-height: 1.3;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-background-color: #121722;
+  --pico-border-color: var(--admin-sidebar-line);
+  --pico-color: #f3f1eb;
 }
 
 .app-switcher select:focus {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--admin-amber);
   outline-offset: 1px;
+  border-color: var(--admin-amber);
 }
 
 .nav-hint {
   margin: 0.15rem 0 0.35rem;
-  padding: 0 0.6rem;
-  color: #94a3b8;
+  padding: 0 0.55rem;
+  color: var(--admin-sidebar-muted);
   font-size: 0.8rem;
   line-height: 1.4;
   text-transform: none;
@@ -139,7 +197,7 @@ body > #app {
 .side-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
+  gap: 0.15rem;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -147,41 +205,72 @@ body > #app {
 
 .side-nav a {
   display: block;
-  color: #cbd5e1;
-  padding: 0.45rem 0.6rem;
-  border-radius: 0.375rem;
+  color: #c9ced8;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 0.1rem;
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   line-height: 1.3;
   white-space: nowrap;
 }
 
-.side-nav a:hover,
-.side-nav a[aria-current="page"] {
-  background: #1f2937;
+.side-nav a:hover {
+  background: rgba(243, 241, 235, 0.06);
   color: #fff;
   text-decoration: none;
 }
 
+.side-nav a[aria-current="page"] {
+  background: rgba(196, 92, 22, 0.16);
+  border-color: rgba(196, 92, 22, 0.55);
+  color: #fff;
+  font-weight: 650;
+  text-decoration: none;
+}
+
 .sidebar .nav-section {
-  margin: 0.85rem 0 0.2rem;
-  padding: 0 0.6rem;
-  font-size: 0.68rem;
-  color: #94a3b8;
+  margin: 0.9rem 0 0.25rem;
+  padding: 0 0.55rem;
+  font-size: 0.64rem;
+  color: var(--admin-amber);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-weight: 700;
 }
 
 .sidebar .nav-section:first-child {
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
 }
 
 .sidebar .logout {
   flex: 0 0 auto;
-  margin-top: 0.75rem;
+  margin: 0.5rem 0 0;
   width: 100% !important;
   max-width: 100%;
+  border: 1.5px solid var(--admin-sidebar-line);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--admin-sidebar-fg);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.2;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: var(--admin-sidebar-line);
+  --pico-color: var(--admin-sidebar-fg);
+  --pico-border-radius: 0.1rem;
+}
+
+.sidebar .logout:hover {
+  border-color: #f3f1eb;
+  color: #fff;
+  --pico-border-color: #f3f1eb;
+  --pico-color: #fff;
 }
 
 .main {
@@ -1794,28 +1883,360 @@ img.user-avatar {
 }
 
 @media (max-width: 800px) {
-  .layout { grid-template-columns: 1fr; }
-  .sidebar {
-    position: static;
-    height: auto;
-    overflow: visible;
-    flex-direction: column;
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .mobile-bar {
+    display: flex;
+    align-items: center;
     gap: 0.65rem;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    grid-column: 1;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1.5px solid #0f131c;
+    background: var(--admin-sidebar-bg);
+    color: var(--admin-sidebar-fg);
   }
-  .side-nav {
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    overflow: visible;
+
+  .mobile-bar__menu {
+    flex: 0 0 auto;
+    margin: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 0.1rem;
+    background: transparent;
+    color: #f3f1eb;
+    box-shadow: none;
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: #f3f1eb;
+    --pico-border-radius: 0.1rem;
   }
+
+  .mobile-bar__menu:hover,
+  .mobile-bar__menu:focus {
+    background: rgba(243, 241, 235, 0.08);
+  }
+
+  .mobile-bar__burger,
+  .mobile-bar__burger::before,
+  .mobile-bar__burger::after {
+    display: block;
+    width: 1rem;
+    height: 1.5px;
+    background: currentColor;
+    position: relative;
+  }
+
+  .mobile-bar__burger::before,
+  .mobile-bar__burger::after {
+    content: "";
+    position: absolute;
+    left: 0;
+  }
+
+  .mobile-bar__burger::before { top: -5px; }
+  .mobile-bar__burger::after { top: 5px; }
+
+  .mobile-bar__brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-bar__mark {
+    display: inline-block;
+    margin-left: 0.25rem;
+    padding: 0.08rem 0.3rem;
+    border: 1px solid #f3f1eb;
+    border-radius: 0.1rem;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+
+  .mobile-bar__app {
+    flex: 0 1 auto;
+    max-width: 8rem;
+    margin: 0;
+    padding: 0.28rem 0.45rem;
+    border: none;
+    border-radius: 0.1rem;
+    background: rgba(243, 241, 235, 0.08);
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    color: #f3f1eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    box-shadow: none;
+    --pico-background-color: rgba(243, 241, 235, 0.08);
+    --pico-border-color: transparent;
+    --pico-color: #f3f1eb;
+    --pico-border-radius: 0.1rem;
+  }
+
+  .mobile-bar__app--empty {
+    visibility: hidden;
+    border: none;
+    padding: 0;
+    width: 0;
+    background: transparent;
+  }
+
+  /* Desktop select stays in the drawer on wide screens only; phones use app sheet. */
+  .app-switcher--select {
+    display: none;
+  }
+
+  .app-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(15, 19, 28, 0.55);
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .app-sheet-backdrop[hidden] {
+    display: none !important;
+  }
+
+  .app-sheet {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    max-height: min(78dvh, 34rem);
+    padding: 0.85rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+    border-top: 1.5px solid #0f131c;
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: var(--admin-sidebar-bg);
+    color: var(--admin-sidebar-fg);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.35);
+    transform: translateY(110%);
+    transition: transform 0.22s ease;
+  }
+
+  .app-sheet[hidden] {
+    display: none !important;
+  }
+
+  .layout--app-sheet-open .app-sheet {
+    display: flex;
+    transform: translateY(0);
+  }
+
+  .app-sheet__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .app-sheet__title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+    --pico-typography-spacing-top: 0;
+  }
+
+  .app-sheet__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    width: 2.35rem;
+    height: 2.35rem;
+    padding: 0;
+    border: none;
+    border-radius: 0.1rem;
+    background: transparent;
+    color: var(--admin-sidebar-fg);
+    font-size: 1.05rem;
+    line-height: 1;
+    box-shadow: none;
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: var(--admin-sidebar-fg);
+  }
+
+  .app-picker--sheet {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .app-picker__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .app-picker__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.85rem 0.9rem;
+    border: 1.5px solid var(--admin-sidebar-line);
+    border-radius: 0.1rem;
+    background: #121722;
+    color: #f3f1eb;
+    text-align: left;
+    font-family: inherit;
+    box-shadow: none;
+    --pico-background-color: #121722;
+    --pico-border-color: var(--admin-sidebar-line);
+    --pico-color: #f3f1eb;
+    --pico-border-radius: 0.1rem;
+  }
+
+  .app-picker__item:hover,
+  .app-picker__item:focus {
+    border-color: rgba(196, 92, 22, 0.7);
+    background: rgba(196, 92, 22, 0.12);
+    --pico-background-color: rgba(196, 92, 22, 0.12);
+  }
+
+  .app-picker__item--current {
+    border-color: var(--admin-amber);
+    background: rgba(196, 92, 22, 0.18);
+    --pico-border-color: var(--admin-amber);
+    --pico-background-color: rgba(196, 92, 22, 0.18);
+  }
+
+  .app-picker__name {
+    font-size: 1.05rem;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  .app-picker__slug {
+    font-size: 0.82rem;
+    color: var(--admin-sidebar-muted);
+    letter-spacing: 0.02em;
+  }
+
+  .app-sheet__all {
+    display: block;
+    text-align: center;
+    padding: 0.65rem;
+    color: var(--admin-sidebar-muted);
+    font-size: 0.85rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
+
+  .app-sheet__all:hover {
+    color: #fff;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(15, 19, 28, 0.55);
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .sidebar-backdrop[hidden] {
+    display: none !important;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(18rem, 88vw);
+    height: 100vh;
+    height: 100dvh;
+    border-right: 1.5px solid #0f131c;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    z-index: 50;
+    align-self: stretch;
+  }
+
+  .layout--nav-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    margin: 0;
+    width: 2.35rem;
+    height: 2.35rem;
+    padding: 0;
+    border: none;
+    border-radius: 0.1rem;
+    background: transparent;
+    color: var(--admin-sidebar-fg);
+    font-size: 1.05rem;
+    line-height: 1;
+    box-shadow: none;
+    --pico-background-color: transparent;
+    --pico-border-color: transparent;
+    --pico-color: var(--admin-sidebar-fg);
+    --pico-border-radius: 0.1rem;
+  }
+
+  .sidebar__close:hover,
+  .sidebar__close:focus {
+    background: rgba(243, 241, 235, 0.08);
+  }
+
   .sidebar .logout {
-    margin-top: 0;
-    width: auto;
-    align-self: flex-start;
+    width: 100% !important;
   }
-  .sidebar .nav-section {
-    flex: 1 0 100%;
-    margin-top: 0.35rem;
+
+  .main {
+    grid-column: 1;
+    padding-top: 0.85rem;
   }
+
   .table-wrap > table { min-width: 28rem; }
+}
+
+@media (max-width: 800px) and (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .app-sheet {
+    transition: none;
+  }
 }
