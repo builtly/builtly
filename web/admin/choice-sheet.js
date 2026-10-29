@@ -37,19 +37,24 @@ function ensureSheet() {
   const layout = layoutEl();
   if (!layout) return null;
   let sheet = document.getElementById("choice-sheet");
-  if (sheet) return sheet;
+  // Must be a native <dialog> so showModal() enters the top layer above other modals.
+  if (sheet && sheet.tagName === "DIALOG" && typeof sheet.showModal === "function") {
+    return sheet;
+  }
+  sheet?.remove();
+  document.getElementById("choice-sheet-backdrop")?.remove();
 
   layout.insertAdjacentHTML("beforeend", `
-    <div class="choice-sheet-backdrop" id="choice-sheet-backdrop" hidden></div>
-    <div class="choice-sheet" id="choice-sheet" role="dialog" aria-modal="true"
-      aria-labelledby="choice-sheet-title" hidden>
-      <div class="choice-sheet__head">
-        <h2 class="choice-sheet__title" id="choice-sheet-title">Choose</h2>
-        <button type="button" class="choice-sheet__close" id="choice-sheet-close" aria-label="Close">✕</button>
+    <dialog class="choice-sheet" id="choice-sheet" aria-labelledby="choice-sheet-title">
+      <div class="choice-sheet__panel">
+        <div class="choice-sheet__head">
+          <h2 class="choice-sheet__title" id="choice-sheet-title">Choose</h2>
+          <button type="button" class="choice-sheet__close" id="choice-sheet-close" aria-label="Close">✕</button>
+        </div>
+        <div class="choice-sheet__list" id="choice-sheet-list" role="listbox"></div>
+        <div class="choice-sheet__footer" id="choice-sheet-footer" hidden></div>
       </div>
-      <div class="choice-sheet__list" id="choice-sheet-list" role="listbox"></div>
-      <div class="choice-sheet__footer" id="choice-sheet-footer" hidden></div>
-    </div>`);
+    </dialog>`);
   return document.getElementById("choice-sheet");
 }
 
@@ -69,12 +74,15 @@ function syncTrigger(select, trigger) {
 export function closeChoiceSheet() {
   const layout = layoutEl();
   const sheet = document.getElementById("choice-sheet");
-  const backdrop = document.getElementById("choice-sheet-backdrop");
   const footer = document.getElementById("choice-sheet-footer");
   const appChip = document.getElementById("mobile-app-chip");
   if (layout) layout.classList.remove("layout--choice-sheet-open");
-  if (sheet) sheet.hidden = true;
-  if (backdrop) backdrop.hidden = true;
+  if (sheet?.tagName === "DIALOG" && sheet.open) {
+    sheet.close();
+  } else if (sheet) {
+    sheet.hidden = true;
+  }
+  document.getElementById("choice-sheet-backdrop")?.setAttribute("hidden", "");
   if (footer) {
     footer.hidden = true;
     footer.innerHTML = "";
@@ -116,10 +124,9 @@ export function openChoicePicker(opts = {}) {
   const titleEl = document.getElementById("choice-sheet-title");
   const list = document.getElementById("choice-sheet-list");
   const footer = document.getElementById("choice-sheet-footer");
-  const backdrop = document.getElementById("choice-sheet-backdrop");
   const closeBtn = document.getElementById("choice-sheet-close");
   if (titleEl) titleEl.textContent = opts.title || "Choose";
-  if (!list || !backdrop || !closeBtn || !footer) return;
+  if (!list || !closeBtn || !footer) return;
 
   list.innerHTML = items.map((item, i) => {
     const on = item.value === opts.value;
@@ -159,14 +166,21 @@ export function openChoicePicker(opts = {}) {
   });
 
   closeBtn.addEventListener("click", finish, { signal });
-  backdrop.addEventListener("click", finish, { signal });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") finish();
+  // Click the transparent dialog chrome (outside the panel) to dismiss.
+  sheet.addEventListener("click", (ev) => {
+    if (ev.target === sheet) finish();
+  }, { signal });
+  sheet.addEventListener("cancel", (ev) => {
+    ev.preventDefault();
+    finish();
   }, { signal });
 
   layout.classList.add("layout--choice-sheet-open");
-  sheet.hidden = false;
-  backdrop.hidden = false;
+  if (typeof sheet.showModal === "function") {
+    if (!sheet.open) sheet.showModal();
+  } else {
+    sheet.hidden = false;
+  }
   syncChromeLock();
 
   const current = list.querySelector(".choice-sheet__item--current") || list.querySelector(".choice-sheet__item");
@@ -200,8 +214,9 @@ export function openAppSwitcher(opts) {
 /**
  * Enhance a <select> with a mobile bottom-sheet picker.
  * Desktop keeps the native control; phones use a trigger + choice sheet.
+ * Pass `inline: true` to insert the trigger beside the select (currency+amount composites).
  * @param {HTMLSelectElement|null} select
- * @param {{ title?: string }} [opts]
+ * @param {{ title?: string, inline?: boolean, triggerClass?: string }} [opts]
  */
 export function wireMobileSelect(select, opts = {}) {
   if (!select || select.dataset.choiceWired === "1") return;
@@ -210,15 +225,21 @@ export function wireMobileSelect(select, opts = {}) {
 
   select.dataset.choiceWired = "1";
   select.classList.add("choice-select");
-  field.classList.add("field--choice");
 
   const trigger = document.createElement("button");
   trigger.type = "button";
-  trigger.className = "choice-trigger";
+  trigger.className = opts.triggerClass || (opts.inline ? "choice-trigger choice-trigger--inline" : "choice-trigger");
   trigger.setAttribute("aria-haspopup", "dialog");
   trigger.setAttribute("aria-controls", "choice-sheet");
   syncTrigger(select, trigger);
-  field.appendChild(trigger);
+
+  if (opts.inline) {
+    select.classList.add("choice-select--inline");
+    select.insertAdjacentElement("afterend", trigger);
+  } else {
+    field.classList.add("field--choice");
+    field.appendChild(trigger);
+  }
 
   trigger.addEventListener("click", () => {
     if (!mobileMQ.matches || select.disabled) return;

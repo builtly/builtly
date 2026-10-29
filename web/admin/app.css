@@ -68,8 +68,7 @@ body > #app {
 .mobile-bar,
 .sidebar-backdrop,
 .sidebar__close,
-.choice-sheet,
-.choice-sheet-backdrop {
+.choice-sheet {
   display: none;
 }
 
@@ -392,6 +391,160 @@ details.advanced summary {
   --pico-background-color: #fdecea;
   --pico-border-color: #f5c2c0;
   --pico-color: #c62828;
+}
+
+/* Global toasts — popover host so they sit above <dialog> modals. */
+.toast-host {
+  position: fixed;
+  top: max(0.85rem, env(safe-area-inset-top, 0px));
+  right: max(0.85rem, env(safe-area-inset-right, 0px));
+  left: auto;
+  bottom: auto;
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  width: min(22.5rem, calc(100vw - 1.7rem));
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+  font-family: var(--admin-sans);
+}
+
+.toast-host:popover-open,
+.toast-host:has(.toast) {
+  display: flex;
+}
+
+.toast-host::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.55rem;
+  align-items: start;
+  box-sizing: border-box;
+  padding: 0.7rem 0.65rem 0.7rem 0.85rem;
+  border: 1.5px solid #0f131c;
+  border-radius: 0.2rem;
+  background: #fff;
+  color: #1a1f2b;
+  box-shadow: 0 10px 28px rgba(15, 19, 28, 0.18);
+  opacity: 0;
+  transform: translateY(-0.45rem);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast--in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast--out {
+  opacity: 0;
+  transform: translateY(-0.35rem);
+}
+
+.toast--ok {
+  border-left: 0.28rem solid #2f6b3a;
+}
+
+.toast--err {
+  border-left: 0.28rem solid #b42318;
+}
+
+.toast__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.toast__msg {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  --pico-typography-spacing-top: 0;
+}
+
+.toast__detail {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: #4a5160;
+  --pico-typography-spacing-top: 0;
+}
+
+.toast__code {
+  margin: 0.1rem 0 0;
+  font-family: var(--admin-mono);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--admin-sidebar-muted, #6b7280);
+  --pico-typography-spacing-top: 0;
+}
+
+.toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.1rem;
+  background: transparent;
+  color: #5c6570;
+  font-size: 0.85rem;
+  line-height: 1;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  --pico-color: #5c6570;
+}
+
+.toast__close:hover,
+.toast__close:focus {
+  color: #0f131c;
+  background: #f0f1f4;
+}
+
+@media (max-width: 800px) {
+  .toast-host {
+    top: auto;
+    bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    width: auto;
+  }
+
+  .toast {
+    transform: translateY(0.45rem);
+  }
+
+  .toast--in {
+    transform: translateY(0);
+  }
+
+  .toast--out {
+    transform: translateY(0.35rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    transition: none;
+  }
 }
 
 /*
@@ -1823,6 +1976,355 @@ button[data-danger] {
   color: #f3f1eb;
 }
 
+/* Products — credit pack catalog */
+.prod-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem 0.85rem;
+}
+
+.prod-create {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
+}
+
+.prod-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.prod-table {
+  min-width: 40rem;
+}
+
+.prod-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 32ms);
+}
+
+.prod-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.prod-row:hover td {
+  background: transparent;
+}
+
+.prod-row td {
+  vertical-align: middle;
+  height: 3.15rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prod-row { animation: none; }
+}
+
+.prod-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.prod-identity__name {
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--user-ink);
+}
+
+.prod-identity__sku {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.prod-credits,
+.prod-price {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.prod-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.prod-edit,
+.prod-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.7rem;
+  margin: 0 0 0 0.35rem;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--user-ink);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: var(--user-ink);
+  --pico-color: var(--user-ink);
+  --pico-border-radius: 0.1rem;
+}
+
+.prod-edit:first-child,
+.prod-actions > .prod-edit:first-child {
+  margin-left: 0;
+}
+
+.prod-edit:hover,
+.prod-toggle:hover {
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  background: rgba(255, 255, 255, 0.55);
+  --pico-color: var(--user-amber);
+  --pico-border-color: var(--user-amber);
+  --pico-background-color: rgba(255, 255, 255, 0.55);
+}
+
+.prod-modal .prod-modal__card {
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.15rem;
+  background: var(--user-paper);
+  box-shadow: 4px 4px 0 rgba(26, 31, 43, 0.14);
+  max-width: min(40rem, calc(100vw - 2rem));
+}
+
+.prod-modal {
+  max-width: min(40rem, calc(100vw - 2rem));
+}
+
+.prod-modal__head {
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.prod-modal__head .user-kicker {
+  margin: 0 0 0.2rem;
+}
+
+.prod-modal__head h2 {
+  font-family: inherit;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--user-ink);
+}
+
+.prod-form .form-row {
+  align-items: flex-start;
+}
+
+.prod-form .field label {
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.prod-form input,
+.prod-form select {
+  margin: 0;
+  margin-bottom: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  box-shadow: none;
+  box-sizing: border-box;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  line-height: 1.25;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+  --pico-font-family: var(--admin-sans);
+}
+
+.prod-form input:focus,
+.prod-form select:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.prod-form .form-row--price {
+  flex-wrap: nowrap;
+}
+
+.prod-form .form-row--price > .field {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0; /* equal half of row (gap handled by flex) */
+}
+
+.prod-price-input {
+  display: flex;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: 100%;
+  height: 2.5rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.prod-price-input:focus-within {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+}
+
+.prod-form .prod-price-input__cur,
+.prod-form .prod-price-input__amt {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  height: 100% !important;
+  min-height: 0;
+  line-height: 1.25;
+}
+
+.prod-form .prod-price-input__cur:focus,
+.prod-form .prod-price-input__amt:focus {
+  outline: none;
+  border-color: transparent;
+}
+
+.prod-price-input__cur,
+.prod-price-input__cur-btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 4.6rem;
+  max-width: 5.5rem;
+  padding: 0 0.35rem 0 0.55rem !important;
+  border-right: 1.5px solid var(--user-ink) !important;
+  background: #f3f4f6 !important;
+  font-family: var(--admin-mono, ui-monospace, monospace) !important;
+  font-size: 0.78rem !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23374151' d='M1 1l4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.35rem center !important;
+  background-size: 0.55rem !important;
+  padding-right: 1.15rem !important;
+  color: var(--user-ink);
+  text-transform: uppercase;
+  box-shadow: none;
+  --pico-background-color: #f3f4f6;
+  --pico-border-color: transparent;
+  --pico-color: var(--user-ink);
+  --pico-border-radius: 0;
+}
+
+.prod-price-input__amt {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0.65rem !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Desktop: hide inline currency sheet trigger; mobile styles below. */
+.prod-price-input .choice-trigger--inline {
+  display: none;
+}
+
+.prod-form .field--status {
+  flex: 0 0 10.5rem;
+  width: 10.5rem;
+  max-width: 42%;
+}
+
+.prod-form .field--status .choice-trigger,
+.prod-form .field--status select {
+  width: 100% !important;
+  box-sizing: border-box;
+}
+
+.prod-modal .form-actions {
+  gap: 0.55rem;
+}
+
+.prod-modal .form-actions button {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 0.1rem;
+  border: 1.5px solid var(--user-ink);
+  padding: 0.45rem 0.85rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.12);
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+}
+
+.prod-modal .form-actions button[type="submit"] {
+  background: var(--user-ink);
+  color: #f3f1eb;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+}
+
+.prod-modal .form-actions button.secondary,
+.prod-modal button.modal-cancel {
+  background: #fff;
+  color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-border-color: var(--user-ink);
+  --pico-color: var(--user-ink);
+}
+
+.prod-modal .form-actions button.secondary:hover,
+.prod-modal button.modal-cancel:hover {
+  background: var(--user-paper);
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  --pico-background-color: var(--user-paper);
+  --pico-border-color: var(--user-amber);
+  --pico-color: var(--user-amber);
+}
+
 /* Users — industrial ops casefile (roster + dossier) */
 
 .user-page-head {
@@ -2870,30 +3372,91 @@ img.user-avatar {
     --pico-border-color: var(--user-ink);
   }
 
-  .choice-sheet-backdrop {
-    display: block;
+  /* Currency prefix inside price combo → bottom sheet on phones. */
+  .prod-price-input .choice-select--inline {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .prod-price-input .choice-trigger--inline,
+  .prod-price-input .prod-price-input__cur-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    width: auto !important;
+    min-width: 4.6rem;
+    max-width: 5.5rem;
+    height: 100% !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-right: 1.5px solid var(--user-ink) !important;
+    border-radius: 0;
+    background: #f3f4f6 !important;
+    color: var(--user-ink);
+    font-family: var(--admin-mono, ui-monospace, monospace) !important;
+    font-size: 0.78rem !important;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: none;
+    --pico-background-color: #f3f4f6;
+    --pico-border-color: transparent;
+    --pico-color: var(--user-ink);
+    --pico-border-radius: 0;
+  }
+
+  .prod-price-input .choice-trigger--inline::after {
+    display: none;
+  }
+
+  /* Native <dialog> so the sheet stacks in the top layer above other modals. */
+  .choice-sheet {
+    display: none;
+    flex-direction: column;
+    align-items: stretch; /* override Pico dialog centering */
+    justify-content: flex-end;
     position: fixed;
     inset: 0;
-    z-index: 55;
-    background: rgba(15, 19, 28, 0.55);
-    border: 0;
-    padding: 0;
+    width: 100%;
+    min-width: 100%;
+    max-width: none;
+    height: 100%;
+    min-height: 100%;
+    max-height: none;
     margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    animation: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
-  .choice-sheet-backdrop[hidden] {
-    display: none !important;
+  .choice-sheet[open] {
+    display: flex;
   }
 
-  .choice-sheet {
+  .choice-sheet::backdrop {
+    background: rgba(15, 19, 28, 0.55);
+  }
+
+  .choice-sheet__panel {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 60;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
     max-height: min(78dvh, 34rem);
     padding: 0.85rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
     border-top: 1.5px solid #0f131c;
@@ -2905,12 +3468,7 @@ img.user-avatar {
     transition: transform 0.22s ease;
   }
 
-  .choice-sheet[hidden] {
-    display: none !important;
-  }
-
-  .layout--choice-sheet-open .choice-sheet {
-    display: flex;
+  .layout--choice-sheet-open .choice-sheet__panel {
     transform: translateY(0);
   }
 
@@ -3106,7 +3664,7 @@ img.user-avatar {
 
 @media (max-width: 800px) and (prefers-reduced-motion: reduce) {
   .sidebar,
-  .choice-sheet {
+  .choice-sheet__panel {
     transition: none;
   }
 }

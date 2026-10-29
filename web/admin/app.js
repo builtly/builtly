@@ -9,6 +9,7 @@ import {
   setCurrentAppID,
 } from "./context.js";
 import { closeChoiceSheet, openAppSwitcher, syncChromeLock } from "./choice-sheet.js";
+import { showErrorToast, showOkToast } from "./toast.js";
 import { renderAppsList, renderAppDetail, renderAppConfig } from "./views/apps.js";
 import { renderConnections } from "./views/connections.js";
 import { renderKeys } from "./views/keys.js";
@@ -22,29 +23,16 @@ import { renderAudit } from "./views/audit.js";
 const root = document.getElementById("app");
 
 /** @type {HTMLElement|null} */
-let bannerEl = null;
-/** @type {HTMLElement|null} */
 let mainEl = null;
 
 onError((err) => {
-  if (!bannerEl) return;
-  if (!err) {
-    bannerEl.hidden = true;
-    bannerEl.textContent = "";
-    bannerEl.removeAttribute("data-tone");
-    return;
-  }
-  bannerEl.hidden = false;
-  bannerEl.setAttribute("data-tone", "err");
-  const detail = err.details ? " " + JSON.stringify(err.details) : "";
-  bannerEl.textContent = (err.code || "error") + ": " + (err.message || "request failed") + detail;
+  // clearError() calls onError(null) before each request — leave existing toasts.
+  if (!err) return;
+  showErrorToast(err);
 });
 
 onOk((msg) => {
-  if (!bannerEl) return;
-  bannerEl.hidden = false;
-  bannerEl.setAttribute("data-tone", "ok");
-  bannerEl.textContent = msg;
+  showOkToast(msg);
 });
 
 function parseRoute() {
@@ -138,7 +126,6 @@ function shellHTML(parts, apps) {
       <button type="button" class="logout" id="logout-btn">Log out</button>
     </aside>
     <div class="main">
-      <p id="banner" class="banner" role="status" hidden></p>
       <div id="view"></div>
     </div>`;
 }
@@ -250,7 +237,6 @@ async function renderShell(parts) {
   teardownChrome();
   const apps = await loadApps();
   root.innerHTML = `<div class="layout">${shellHTML(parts, apps)}</div>`;
-  bannerEl = document.getElementById("banner");
   mainEl = document.getElementById("view");
   const layout = root.querySelector(".layout");
   wireChrome(layout, parts, apps);
@@ -308,12 +294,15 @@ function renderLogin() {
       boot();
     } catch {
       clearToken();
+      // api() already toasted the HTTP error; keep an inline hint on the login card.
       const box = document.getElementById("login-error");
-      box.hidden = false;
-      box.className = "banner";
-      box.setAttribute("data-tone", "err");
-      box.setAttribute("role", "alert");
-      box.textContent = "Token rejected. Check BUILTLY_ADMIN_TOKEN.";
+      if (box) {
+        box.hidden = false;
+        box.className = "banner";
+        box.setAttribute("data-tone", "err");
+        box.setAttribute("role", "alert");
+        box.textContent = "Token rejected. Check BUILTLY_ADMIN_TOKEN.";
+      }
     }
   });
 }
@@ -409,10 +398,9 @@ async function route() {
     }
     location.hash = "#/apps";
   } catch (e) {
-    if (!bannerEl || bannerEl.hidden) {
-      view.innerHTML = `<p class="banner" data-tone="err" role="alert">${esc(e.message || String(e))}</p>`;
-      hydrate(view);
-    }
+    // API failures already toasted via onError; still replace the view so the page isn't blank.
+    view.innerHTML = `<p class="banner" data-tone="err" role="alert">${esc(e.message || String(e))}</p>`;
+    hydrate(view);
   }
 }
 

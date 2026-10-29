@@ -220,7 +220,11 @@ func (s *Service) Patch(ctx context.Context, appID, id uuid.UUID, in PatchInput)
 func (s *Service) validateStripePrice(ctx context.Context, appID uuid.UUID, priceID, currency string) error {
 	conn, err := s.resolver.For(ctx, appID, integration.ProviderStripe)
 	if err == integration.ErrNotConfigured {
-		return ErrStripePriceInvalid.WithDetails(map[string]any{"reason": "stripe not configured"})
+		// Price IDs are optional; only validate when the caller actually sets one.
+		return integration.ErrNotConfigured.WithDetails(map[string]any{
+			"provider": "stripe",
+			"hint":     "leave stripe_price_id empty, or connect Stripe for this app first",
+		})
 	}
 	if err != nil {
 		return err
