@@ -2637,7 +2637,8 @@ button[data-danger] {
 }
 
 .act-filters,
-.ref-filters {
+.ref-filters,
+.ops-filters {
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.85rem;
@@ -2645,14 +2646,16 @@ button[data-danger] {
 
 /* Keep Filter button in the flow — toolbar's margin-left:auto made gaps uneven. */
 .act-filters > button,
-.ref-filters > button {
+.ref-filters > button,
+.ops-filters > button {
   margin-left: 0;
   height: 2.5rem;
   padding: 0 0.85rem;
 }
 
 .act-filters__fields,
-.ref-filters__fields {
+.ref-filters__fields,
+.ops-filters__fields {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -2661,7 +2664,8 @@ button[data-danger] {
   min-width: 0;
 }
 
-.act-filters__fields > input {
+.act-filters__fields > input,
+.ops-filters__fields > input {
   flex: 1 1 10rem;
   min-width: 8rem;
   width: auto;
@@ -2675,9 +2679,15 @@ button[data-danger] {
   line-height: 1.25;
 }
 
+.ops-filters__fields > input.mono {
+  font-family: var(--admin-mono);
+  font-size: 0.85rem;
+}
+
 /* Fixed wrapper width — don't let toolbar select min-width:10rem overflow and eat the gap. */
 .act-filters__select,
-.ref-filters__select {
+.ref-filters__select,
+.ops-filters__select {
   flex: 0 0 10.5rem;
   width: 10.5rem;
   min-width: 10.5rem;
@@ -2696,7 +2706,9 @@ button[data-danger] {
 .act-filters__select select,
 .act-filters__select .choice-trigger,
 .ref-filters__select select,
-.ref-filters__select .choice-trigger {
+.ref-filters__select .choice-trigger,
+.ops-filters__select select,
+.ops-filters__select .choice-trigger {
   margin: 0;
   border: 1.5px solid var(--user-ink);
   border-radius: 0.1rem;
@@ -2724,7 +2736,8 @@ button[data-danger] {
 }
 
 .act-filters__select select,
-.ref-filters__select select {
+.ref-filters__select select,
+.ops-filters__select select {
   display: block;
   padding-right: 1.75rem;
   appearance: none;
@@ -2990,6 +3003,202 @@ button[data-danger] {
   --pico-background-color: rgba(154, 52, 18, 0.08);
 }
 
+/* Outbox — delivery queue */
+.ob-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.ob-table {
+  min-width: 52rem;
+}
+
+.ob-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.ob-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.ob-row:hover td {
+  background: transparent;
+}
+
+.ob-row td {
+  vertical-align: middle;
+  height: 3rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-row { animation: none; }
+}
+
+.ob-event {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  max-width: 14rem;
+}
+
+.ob-event__type {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--user-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ob-event__id {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.ob-sub {
+  font-size: 0.85rem;
+  color: #5c6570;
+  white-space: nowrap;
+}
+
+.ob-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ob-err,
+.ob-payload {
+  max-width: 11rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ob-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.ob-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: transparent;
+  color: var(--user-ink);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: none;
+  --pico-background-color: transparent;
+  --pico-border-color: var(--user-ink);
+  --pico-color: var(--user-ink);
+  --pico-border-radius: 0.1rem;
+}
+
+.ob-retry:hover {
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  background: rgba(255, 255, 255, 0.55);
+  --pico-color: var(--user-amber);
+  --pico-border-color: var(--user-amber);
+}
+
+/* Audit log — compliance trail */
+.aud-table-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.aud-table {
+  min-width: 48rem;
+}
+
+.aud-row {
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.aud-row:hover {
+  background: rgba(196, 92, 22, 0.04);
+}
+
+.aud-row:hover td {
+  background: transparent;
+}
+
+.aud-row td {
+  vertical-align: middle;
+  height: 3rem;
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aud-row { animation: none; }
+}
+
+.aud-action {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--user-ink);
+  white-space: nowrap;
+}
+
+.aud-app,
+.aud-ip,
+.aud-req {
+  font-size: 0.78rem;
+  color: #5c6570;
+  white-space: nowrap;
+}
+
+.aud-target {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+  max-width: 12rem;
+}
+
+.aud-target__type {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--user-ink);
+}
+
+.aud-target__id {
+  font-size: 0.72rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aud-diff {
+  max-width: 12rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Users — industrial ops casefile (roster + dossier) */
 
 .user-page-head {
@@ -3092,6 +3301,7 @@ button[data-danger] {
 /* Users controls — match casefile ink/paper (override Pico soft radius) */
 .user-search input,
 .act-filters input,
+.ops-filters input,
 .user-adjust input,
 .user-adjust select {
   margin-bottom: 0;
@@ -3137,6 +3347,7 @@ button[data-danger] {
 
 .user-search input:focus,
 .act-filters input:focus,
+.ops-filters input:focus,
 .user-adjust input:focus,
 .user-adjust select:focus {
   outline: 2px solid var(--user-amber);
@@ -3155,6 +3366,7 @@ button[data-danger] {
 
 .user-search button[type="submit"],
 .act-filters button[type="submit"],
+.ops-filters button[type="submit"],
 .user-dossier__actions button[type="button"],
 .user-adjust button[type="submit"],
 .user-adjust button[type="button"] {
@@ -3179,6 +3391,7 @@ button[data-danger] {
 
 .user-search button[type="submit"]:hover,
 .act-filters button[type="submit"]:hover,
+.ops-filters button[type="submit"]:hover,
 .user-dossier__actions button[type="button"]:hover,
 .user-adjust button[type="submit"]:hover {
   background: #2a3142;
