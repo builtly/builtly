@@ -103,24 +103,26 @@ export async function renderProducts(el, appID) {
   }
 
   function openDialog(mode, product) {
+    // Prefer elements.namedItem — form.id / form.name are reserved HTMLFormElement IDL attrs.
+    const f = (n) => form.elements.namedItem(n);
     form.reset();
-    form.id.value = "";
-    form.currency.value = "usd";
+    f("id").value = "";
+    f("currency").value = "usd";
     if (mode === "edit" && product) {
       titleEl.textContent = "Edit product";
       submitBtn.textContent = "Save";
       activeRow.hidden = false;
-      form.id.value = product.id;
-      form.sku.value = product.sku;
-      form.name.value = product.name;
-      form.credits.value = product.credits;
-      form.price_amount.value = product.price_amount;
-      form.currency.value = product.currency;
-      form.description.value = product.description || "";
-      form.stripe_price_id.value = product.stripe_price_id || "";
-      form.apple_product_id.value = product.apple_product_id || "";
-      form.google_product_id.value = product.google_product_id || "";
-      form.active.value = product.active ? "true" : "false";
+      f("id").value = product.id;
+      f("sku").value = product.sku;
+      f("name").value = product.name;
+      f("credits").value = product.credits;
+      f("price_amount").value = product.price_amount;
+      f("currency").value = product.currency;
+      f("description").value = product.description || "";
+      f("stripe_price_id").value = product.stripe_price_id || "";
+      f("apple_product_id").value = product.apple_product_id || "";
+      f("google_product_id").value = product.google_product_id || "";
+      f("active").value = product.active ? "true" : "false";
     } else {
       titleEl.textContent = "Add product";
       submitBtn.textContent = "Create";
@@ -128,7 +130,7 @@ export async function renderProducts(el, appID) {
     }
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
-    form.sku.focus();
+    f("sku").focus();
   }
 
   el.querySelector("#add-prod").addEventListener("click", () => openDialog("create"));

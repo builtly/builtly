@@ -171,21 +171,19 @@ export async function renderUsers(el, appID) {
   el.querySelector("#search").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const qq = new FormData(ev.target).get("q");
+    // hashchange → route() re-renders; do not call renderUsers here (double fetch).
     location.hash = usersHash(appID, { q: String(qq || "") });
-    renderUsers(el, appID);
   });
 
   el.querySelector("#user-prev").addEventListener("click", () => {
     if (!trail.length) return;
     const prev = trail[trail.length - 1] || "";
     location.hash = usersHash(appID, { q, cursor: prev, trail: trail.slice(0, -1) });
-    renderUsers(el, appID);
   });
 
   el.querySelector("#user-next").addEventListener("click", () => {
     if (!nextCursor) return;
     location.hash = usersHash(appID, { q, cursor: nextCursor, trail: [...trail, cursor] });
-    renderUsers(el, appID);
   });
 
   wireAvatarFallbacks(el);

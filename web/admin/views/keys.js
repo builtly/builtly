@@ -83,7 +83,7 @@ export async function renderKeys(el, appID) {
     titleEl.textContent = "Create key";
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
-    form.name.focus();
+    form.elements.namedItem("name").focus();
   }
 
   function showReveal(secret) {
