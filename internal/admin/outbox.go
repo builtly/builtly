@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -18,8 +17,18 @@ import (
 func (h *Handler) listOutbox(w http.ResponseWriter, r *http.Request) {
 	status := r.URL.Query().Get("status")
 	subscriber := r.URL.Query().Get("subscriber")
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	rows, err := h.outbox.List(r.Context(), status, subscriber, limit)
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	rows, err := h.outbox.List(r.Context(), status, subscriber, limit, after, afterID)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	total, err := h.outbox.Count(r.Context(), status, subscriber)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -28,7 +37,12 @@ func (h *Handler) listOutbox(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		items = append(items, h.outboxItem(row))
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
+	if len(rows) == limit && limit > 0 {
+		last := rows[len(rows)-1]
+		resp["next_cursor"] = keysetCursor(last.CreatedAt, last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) retryOutbox(w http.ResponseWriter, r *http.Request) {

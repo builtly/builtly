@@ -2,7 +2,6 @@ package admin
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -31,8 +30,14 @@ func (h *Handler) listReferrals(w http.ResponseWriter, r *http.Request) {
 		}
 		referrerID = &id
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	rows, next, err := h.referrals.ListAdmin(r.Context(), appID, referrerID, r.URL.Query().Get("status"), limit, r.URL.Query().Get("cursor"))
+	status := r.URL.Query().Get("status")
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	rows, next, err := h.referrals.ListAdmin(r.Context(), appID, referrerID, status, limit, r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	total, err := h.referrals.CountAdmin(r.Context(), appID, referrerID, status)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -54,7 +59,7 @@ func (h *Handler) listReferrals(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	resp := map[string]any{"items": items}
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
 	if next != "" {
 		resp["next_cursor"] = next
 	}

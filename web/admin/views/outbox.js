@@ -1,6 +1,9 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
 import { wireMobileSelect } from "../choice-sheet.js";
 
+const PAGE_SIZE = 50;
+const CURSOR_FIRST = "_";
+
 function outboxStamp(status) {
   const s = status || "unknown";
   let tone = "unknown";
@@ -31,17 +34,45 @@ function applyRevealDelays(root, selector) {
   });
 }
 
+function encodeCursor(c) {
+  return c || CURSOR_FIRST;
+}
+
+function decodeCursor(c) {
+  return !c || c === CURSOR_FIRST ? "" : c;
+}
+
+function parseTrail(raw) {
+  if (!raw) return [];
+  return raw.split("|").filter((p) => p !== "").map(decodeCursor);
+}
+
+function outboxHash({ status = "", subscriber = "", cursor = "", trail = [] } = {}) {
+  const p = new URLSearchParams();
+  if (status) p.set("status", status);
+  if (subscriber) p.set("subscriber", subscriber);
+  if (cursor) p.set("cursor", cursor);
+  if (trail.length) p.set("trail", trail.map(encodeCursor).join("|"));
+  const qs = p.toString();
+  return "#/outbox" + (qs ? "?" + qs : "");
+}
+
 export async function renderOutbox(el) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const status = params.get("status") || "";
   const subscriber = params.get("subscriber") || "";
+  const cursor = params.get("cursor") || "";
+  const trail = parseTrail(params.get("trail") || "");
+  const page = trail.length + 1;
   el.innerHTML = `<div class="page-head"><h1>Outbox</h1><p class="muted">Loading…</p></div>`;
-  const qs = new URLSearchParams({ limit: "100" });
+  const qs = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (status) qs.set("status", status);
   if (subscriber) qs.set("subscriber", subscriber);
+  if (cursor) qs.set("cursor", cursor);
   const data = await api("GET", "/outbox?" + qs.toString());
   const items = data.items || [];
-  const deadN = items.filter((r) => r.status === "dead").length;
+  const total = Number(data.total ?? items.length);
+  const nextCursor = data.next_cursor || "";
 
   const rows = items.map((r, i) => {
     const err = r.last_error || "";
@@ -50,7 +81,7 @@ export async function renderOutbox(el) {
       ? `<button type="button" class="ob-retry retry" data-id="${esc(r.id)}">Retry</button>`
       : `<span class="user-empty">—</span>`;
     return `<tr class="ob-row" data-reveal="${i}">
-      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td class="user-idx" aria-hidden="true">${String((page - 1) * PAGE_SIZE + i + 1).padStart(2, "0")}</td>
       <td class="user-when">${esc(fmtTime(r.created_at))}</td>
       <td>
         <div class="ob-event">
@@ -74,7 +105,7 @@ export async function renderOutbox(el) {
         <h1 class="user-page-title">Outbox</h1>
         <p class="muted">Async event delivery queue — retry dead letters from here.</p>
       </div>
-      <div class="user-count" aria-label="Outbox rows">${items.length}${deadN ? `<span class="ov-bound-total"> · ${deadN} dead</span>` : ""}</div>
+      <div class="user-count" aria-label="Outbox rows">${total}</div>
     </div>
 
     <form id="filters" class="toolbar user-search ops-filters">
@@ -103,7 +134,12 @@ export async function renderOutbox(el) {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    <nav class="user-pager" aria-label="Outbox pagination">
+      <button type="button" class="user-pager__btn" id="ob-prev" ${trail.length ? "" : "disabled"}>Prev</button>
+      <span class="user-pager__meta">Page ${page} · ${items.length} shown</span>
+      <button type="button" class="user-pager__btn" id="ob-next" ${nextCursor ? "" : "disabled"}>Next</button>
+    </nav>`;
 
   wireMobileSelect(el.querySelector("#ob-status"), { title: "Status" });
   applyRevealDelays(el, ".ob-row[data-reveal]");
@@ -111,13 +147,21 @@ export async function renderOutbox(el) {
   el.querySelector("#filters").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
-    const q = new URLSearchParams();
-    const st = String(fd.get("status") || "");
-    const sub = String(fd.get("subscriber") || "").trim();
-    if (st) q.set("status", st);
-    if (sub) q.set("subscriber", sub);
-    const qs2 = q.toString();
-    location.hash = "#/outbox" + (qs2 ? "?" + qs2 : "");
+    location.hash = outboxHash({
+      status: String(fd.get("status") || ""),
+      subscriber: String(fd.get("subscriber") || "").trim(),
+    });
+  });
+
+  el.querySelector("#ob-prev").addEventListener("click", () => {
+    if (!trail.length) return;
+    const prev = trail[trail.length - 1] || "";
+    location.hash = outboxHash({ status, subscriber, cursor: prev, trail: trail.slice(0, -1) });
+  });
+
+  el.querySelector("#ob-next").addEventListener("click", () => {
+    if (!nextCursor) return;
+    location.hash = outboxHash({ status, subscriber, cursor: nextCursor, trail: [...trail, cursor] });
   });
 
   el.querySelectorAll(".retry").forEach((btn) => {

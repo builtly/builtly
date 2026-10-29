@@ -1,6 +1,9 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
 import { wireMobileSelect } from "../choice-sheet.js";
 
+const PAGE_SIZE = 50;
+const CURSOR_FIRST = "_";
+
 function referralStamp(status) {
   const s = status || "unknown";
   let tone = "unknown";
@@ -34,15 +37,42 @@ function applyRevealDelays(root, selector) {
   });
 }
 
+function encodeCursor(c) {
+  return c || CURSOR_FIRST;
+}
+
+function decodeCursor(c) {
+  return !c || c === CURSOR_FIRST ? "" : c;
+}
+
+function parseTrail(raw) {
+  if (!raw) return [];
+  return raw.split("|").filter((p) => p !== "").map(decodeCursor);
+}
+
+function referralsHash(appID, { status = "", cursor = "", trail = [] } = {}) {
+  const p = new URLSearchParams();
+  if (status) p.set("status", status);
+  if (cursor) p.set("cursor", cursor);
+  if (trail.length) p.set("trail", trail.map(encodeCursor).join("|"));
+  const qs = p.toString();
+  return "#/apps/" + appID + "/referrals" + (qs ? "?" + qs : "");
+}
+
 export async function renderReferrals(el, appID) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const status = params.get("status") || "";
+  const cursor = params.get("cursor") || "";
+  const trail = parseTrail(params.get("trail") || "");
+  const page = trail.length + 1;
   el.innerHTML = `<div class="page-head"><h1>Referrals</h1><p class="muted">Loading…</p></div>`;
-  const qs = new URLSearchParams({ limit: "50" });
+  const qs = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (status) qs.set("status", status);
+  if (cursor) qs.set("cursor", cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/referrals?" + qs.toString());
   const items = data.items || [];
-  const activeN = items.filter((r) => r.status !== "void").length;
+  const total = Number(data.total ?? items.length);
+  const nextCursor = data.next_cursor || "";
 
   const rows = items.map((r, i) => {
     const referrer = r.referrer || {};
@@ -51,7 +81,7 @@ export async function renderReferrals(el, appID) {
       ? `<button type="button" class="ref-void void-ref" data-id="${esc(r.id)}">Void</button>`
       : `<span class="user-empty">—</span>`;
     return `<tr class="ref-row" data-reveal="${i}">
-      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td class="user-idx" aria-hidden="true">${String((page - 1) * PAGE_SIZE + i + 1).padStart(2, "0")}</td>
       <td>${partyCell(appID, referrer)}</td>
       <td>${partyCell(appID, referee)}</td>
       <td class="ref-code mono">${esc(r.code || "—")}</td>
@@ -73,7 +103,7 @@ export async function renderReferrals(el, appID) {
         <h1 class="user-page-title">Referrals</h1>
         <p class="muted">Invite attribution and reward ledger for this app.</p>
       </div>
-      <div class="user-count" aria-label="Active referrals">${activeN}<span class="ov-bound-total">/${items.length}</span></div>
+      <div class="user-count" aria-label="Referrals total">${total}</div>
     </div>
 
     <form id="ref-filters" class="toolbar user-search ref-filters">
@@ -98,14 +128,29 @@ export async function renderReferrals(el, appID) {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    <nav class="user-pager" aria-label="Referrals pagination">
+      <button type="button" class="user-pager__btn" id="ref-prev" ${trail.length ? "" : "disabled"}>Prev</button>
+      <span class="user-pager__meta">Page ${page} · ${items.length} shown</span>
+      <button type="button" class="user-pager__btn" id="ref-next" ${nextCursor ? "" : "disabled"}>Next</button>
+    </nav>`;
 
   applyRevealDelays(el, ".ref-row[data-reveal]");
   wireMobileSelect(el.querySelector("#filter-status"), { title: "Status" });
 
   el.querySelector("#filter-status").addEventListener("change", (ev) => {
-    const v = ev.target.value;
-    location.hash = "#/apps/" + appID + "/referrals" + (v ? "?status=" + encodeURIComponent(v) : "");
+    location.hash = referralsHash(appID, { status: ev.target.value });
+  });
+
+  el.querySelector("#ref-prev").addEventListener("click", () => {
+    if (!trail.length) return;
+    const prev = trail[trail.length - 1] || "";
+    location.hash = referralsHash(appID, { status, cursor: prev, trail: trail.slice(0, -1) });
+  });
+
+  el.querySelector("#ref-next").addEventListener("click", () => {
+    if (!nextCursor) return;
+    location.hash = referralsHash(appID, { status, cursor: nextCursor, trail: [...trail, cursor] });
   });
 
   el.querySelectorAll(".void-ref").forEach((btn) => {

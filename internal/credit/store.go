@@ -134,11 +134,53 @@ func (s *Store) SumReversalAmount(ctx context.Context, q db.Querier, appID uuid.
 }
 
 // AppLedgerQuery filters an app-wide ledger list. UserQ is an email or user-id prefix.
+// After/AfterID empty means the first page; order is created_at DESC, id DESC.
 type AppLedgerQuery struct {
 	EntryType string
 	UserID    *uuid.UUID
 	UserQ     string
 	Limit     int
+	After     db.Time
+	AfterID   uuid.UUID
+}
+
+func appLedgerWhere(appID uuid.UUID, f AppLedgerQuery) (string, []any) {
+	where := `WHERE app_id = ?`
+	args := []any{appID}
+	if f.EntryType != "" {
+		where += ` AND entry_type = ?`
+		args = append(args, f.EntryType)
+	}
+	if f.UserID != nil {
+		where += ` AND user_id = ?`
+		args = append(args, *f.UserID)
+	}
+	if f.UserQ != "" {
+		like := f.UserQ + "%"
+		where += ` AND EXISTS (
+			SELECT 1 FROM users
+			WHERE users.app_id = credit_ledger.app_id AND users.id = credit_ledger.user_id
+			  AND (users.email LIKE ? OR CAST(users.id AS TEXT) LIKE ?)
+		)`
+		args = append(args, like, like)
+	}
+	return where, args
+}
+
+const selectAppLedger = `
+		SELECT id, app_id, user_id, entry_type, amount, balance_after, idempotency_key,
+		       reference_type, reference_id, actor, reason, metadata, created_at
+		FROM credit_ledger `
+
+// CountAppEntries returns how many ledger rows match the filter (ignores cursor/limit).
+func (s *Store) CountAppEntries(ctx context.Context, q db.Querier, appID uuid.UUID, f AppLedgerQuery) (int, error) {
+	where, args := appLedgerWhere(appID, f)
+	var n int
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM credit_ledger `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	return n, nil
 }
 
 // ListAppEntries returns ledger rows for an app, newest first.
@@ -146,32 +188,15 @@ func (s *Store) ListAppEntries(ctx context.Context, q db.Querier, appID uuid.UUI
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 50
 	}
-	query := `
-		SELECT id, app_id, user_id, entry_type, amount, balance_after, idempotency_key,
-		       reference_type, reference_id, actor, reason, metadata, created_at
-		FROM credit_ledger WHERE app_id = ?`
-	args := []any{appID}
-	if f.EntryType != "" {
-		query += ` AND entry_type = ?`
-		args = append(args, f.EntryType)
+	where, args := appLedgerWhere(appID, f)
+	if f.AfterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, f.After, f.After, f.AfterID)
 	}
-	if f.UserID != nil {
-		query += ` AND user_id = ?`
-		args = append(args, *f.UserID)
-	}
-	if f.UserQ != "" {
-		like := f.UserQ + "%"
-		query += ` AND EXISTS (
-			SELECT 1 FROM users
-			WHERE users.app_id = credit_ledger.app_id AND users.id = credit_ledger.user_id
-			  AND (users.email LIKE ? OR CAST(users.id AS TEXT) LIKE ?)
-		)`
-		args = append(args, like, like)
-	}
-	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	args = append(args, f.Limit)
 	var rows []Entry
-	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(query), args...)
+	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectAppLedger+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	return rows, db.MapError(err)
 }
 

@@ -116,7 +116,7 @@ func TestOutboxBackoffAndDead(t *testing.T) {
 	if err != nil || !worked {
 		t.Fatalf("tick1: worked=%v err=%v", worked, err)
 	}
-	rows, err := store.List(ctx, outbox.StatusPending, "", 10)
+	rows, err := store.List(ctx, outbox.StatusPending, "", 10, db.Time{}, uuid.Nil)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("list pending: %v %#v", err, rows)
 	}
@@ -127,7 +127,7 @@ func TestOutboxBackoffAndDead(t *testing.T) {
 
 	// Drive remaining attempts until dead (maxAttempts=12).
 	for i := 0; i < 11; i++ {
-		rows, err = store.List(ctx, outbox.StatusPending, "", 10)
+		rows, err = store.List(ctx, outbox.StatusPending, "", 10, db.Time{}, uuid.Nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,12 +145,12 @@ func TestOutboxBackoffAndDead(t *testing.T) {
 			t.Fatalf("expected work on loop %d", i)
 		}
 	}
-	dead, err := store.List(ctx, outbox.StatusDead, "", 10)
+	dead, err := store.List(ctx, outbox.StatusDead, "", 10, db.Time{}, uuid.Nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(dead) != 1 {
-		pending, _ := store.List(ctx, outbox.StatusPending, "", 10)
+		pending, _ := store.List(ctx, outbox.StatusPending, "", 10, db.Time{}, uuid.Nil)
 		t.Fatalf("want dead=1, got dead=%d pending=%d", len(dead), len(pending))
 	}
 	if dead[0].Attempts < 12 {
@@ -179,7 +179,7 @@ func TestOutboxSkippedNotConfigured(t *testing.T) {
 	if err != nil || !worked {
 		t.Fatalf("tick: %v %v", worked, err)
 	}
-	skipped, err := store.List(context.Background(), outbox.StatusSkipped, "", 10)
+	skipped, err := store.List(context.Background(), outbox.StatusSkipped, "", 10, db.Time{}, uuid.Nil)
 	if err != nil || len(skipped) != 1 {
 		t.Fatalf("skipped: %v %#v", err, skipped)
 	}
@@ -203,7 +203,7 @@ func TestOutboxPermanentDead(t *testing.T) {
 	}
 	d := outbox.NewDispatcher(store, box, reg, "inst", discardLog())
 	_, _ = d.Tick(context.Background())
-	dead, _ := store.List(context.Background(), outbox.StatusDead, "", 10)
+	dead, _ := store.List(context.Background(), outbox.StatusDead, "", 10, db.Time{}, uuid.Nil)
 	if len(dead) != 1 || dead[0].Attempts != 1 {
 		t.Fatalf("want immediate dead after permanent, got %#v", dead)
 	}
@@ -228,11 +228,11 @@ func TestOutboxRetryDead(t *testing.T) {
 	}
 	d := outbox.NewDispatcher(store, box, reg, "inst", discardLog())
 	_, _ = d.Tick(ctx)
-	dead, _ := store.List(ctx, outbox.StatusDead, "", 10)
+	dead, _ := store.List(ctx, outbox.StatusDead, "", 10, db.Time{}, uuid.Nil)
 	if err := store.RetryDead(ctx, dead[0].ID, db.Now()); err != nil {
 		t.Fatal(err)
 	}
-	pending, _ := store.List(ctx, outbox.StatusPending, "", 10)
+	pending, _ := store.List(ctx, outbox.StatusPending, "", 10, db.Time{}, uuid.Nil)
 	if len(pending) != 1 || pending[0].Attempts != 0 {
 		t.Fatalf("retry dead: %#v", pending)
 	}

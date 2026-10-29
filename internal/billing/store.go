@@ -105,12 +105,53 @@ func (s *Store) SetRefundedCredits(ctx context.Context, q db.Querier, appID, id 
 }
 
 // PurchaseListQuery filters an app-wide purchase list. UserQ is an email or user-id prefix.
+// After/AfterID empty means the first page; order is created_at DESC, id DESC.
 type PurchaseListQuery struct {
 	Status   string
 	Provider string
 	UserID   *uuid.UUID
 	UserQ    string
 	Limit    int
+	After    db.Time
+	AfterID  uuid.UUID
+}
+
+func purchaseListWhere(appID uuid.UUID, f PurchaseListQuery) (string, []any) {
+	where := `WHERE app_id = ?`
+	args := []any{appID}
+	if f.Status != "" {
+		where += ` AND status = ?`
+		args = append(args, f.Status)
+	}
+	if f.Provider != "" {
+		where += ` AND provider = ?`
+		args = append(args, f.Provider)
+	}
+	if f.UserID != nil {
+		where += ` AND user_id = ?`
+		args = append(args, *f.UserID)
+	}
+	if f.UserQ != "" {
+		like := f.UserQ + "%"
+		where += ` AND EXISTS (
+			SELECT 1 FROM users
+			WHERE users.app_id = purchases.app_id AND users.id = purchases.user_id
+			  AND (users.email LIKE ? OR CAST(users.id AS TEXT) LIKE ?)
+		)`
+		args = append(args, like, like)
+	}
+	return where, args
+}
+
+// CountAppPurchases returns how many purchases match the filter (ignores cursor/limit).
+func (s *Store) CountAppPurchases(ctx context.Context, q db.Querier, appID uuid.UUID, f PurchaseListQuery) (int, error) {
+	where, args := purchaseListWhere(appID, f)
+	var n int
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM purchases `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	return n, nil
 }
 
 // ListAppPurchases lists purchases for one app, newest first.
@@ -118,33 +159,15 @@ func (s *Store) ListAppPurchases(ctx context.Context, q db.Querier, appID uuid.U
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 50
 	}
-	query := selectPurchase + ` WHERE app_id = ?`
-	args := []any{appID}
-	if f.Status != "" {
-		query += ` AND status = ?`
-		args = append(args, f.Status)
+	where, args := purchaseListWhere(appID, f)
+	if f.AfterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, f.After, f.After, f.AfterID)
 	}
-	if f.Provider != "" {
-		query += ` AND provider = ?`
-		args = append(args, f.Provider)
-	}
-	if f.UserID != nil {
-		query += ` AND user_id = ?`
-		args = append(args, *f.UserID)
-	}
-	if f.UserQ != "" {
-		like := f.UserQ + "%"
-		query += ` AND EXISTS (
-			SELECT 1 FROM users
-			WHERE users.app_id = purchases.app_id AND users.id = purchases.user_id
-			  AND (users.email LIKE ? OR CAST(users.id AS TEXT) LIKE ?)
-		)`
-		args = append(args, like, like)
-	}
-	query += ` ORDER BY created_at DESC, id DESC LIMIT ?`
 	args = append(args, f.Limit)
 	var rows []Purchase
-	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(query), args...)
+	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectPurchase+` `+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	return rows, db.MapError(err)
 }
 

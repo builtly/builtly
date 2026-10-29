@@ -587,13 +587,29 @@ func (h *Handler) listAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		appID = &id
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	items, err := h.audit.List(r.Context(), appID, r.URL.Query().Get("action"), limit)
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	action := r.URL.Query().Get("action")
+	items, err := h.audit.List(r.Context(), appID, action, limit, after, afterID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+	total, err := h.audit.Count(r.Context(), appID, action)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
+	if len(items) == limit && limit > 0 {
+		last := items[len(items)-1]
+		resp["next_cursor"] = keysetCursor(last.CreatedAt, last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) writeAudit(r *http.Request, appID *uuid.UUID, action, targetType, targetID string, diff map[string]any) error {

@@ -12,6 +12,9 @@ const ZERO_DECIMAL = new Set([
   "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
 ]);
 
+const PAGE_SIZE = 50;
+const CURSOR_FIRST = "_";
+
 function currencyFactor(currency) {
   return ZERO_DECIMAL.has(String(currency || "").toLowerCase()) ? 1 : 100;
 }
@@ -26,11 +29,29 @@ function moneyLabel(minor, currency) {
   return `${major} ${(cur || "").toUpperCase()}`.trim();
 }
 
+function encodeCursor(c) {
+  return c || CURSOR_FIRST;
+}
+
+function decodeCursor(c) {
+  return !c || c === CURSOR_FIRST ? "" : c;
+}
+
+function parseTrail(raw) {
+  if (!raw) return [];
+  return raw.split("|").filter((p) => p !== "").map(decodeCursor);
+}
+
 function hashFor(appID, view, filters) {
   const qs = new URLSearchParams();
   if (view === "ledger") qs.set("view", "ledger");
   for (const [k, v] of Object.entries(filters)) {
-    if (v) qs.set(k, v);
+    if (v == null || v === "") continue;
+    if (k === "trail" && Array.isArray(v)) {
+      if (v.length) qs.set("trail", v.map(encodeCursor).join("|"));
+      continue;
+    }
+    qs.set(k, v);
   }
   const q = qs.toString();
   return "#/apps/" + appID + "/activity" + (q ? "?" + q : "");
@@ -72,26 +93,40 @@ function userCell(appID, id, email) {
   return `<a class="act-user act-user--id mono" href="#/apps/${esc(appID)}/users/${esc(id)}">${esc(id)}</a>`;
 }
 
+function pagerHTML(page, shown, nextCursor, trailLen, idPrefix) {
+  return `<nav class="user-pager" aria-label="Pagination">
+    <button type="button" class="user-pager__btn" id="${idPrefix}-prev" ${trailLen ? "" : "disabled"}>Prev</button>
+    <span class="user-pager__meta">Page ${page} · ${shown} shown</span>
+    <button type="button" class="user-pager__btn" id="${idPrefix}-next" ${nextCursor ? "" : "disabled"}>Next</button>
+  </nav>`;
+}
+
 export async function renderActivity(el, appID) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const view = params.get("view") === "ledger" ? "ledger" : "purchases";
   const q = params.get("q") || "";
   const userID = params.get("user_id") || "";
+  const cursor = params.get("cursor") || "";
+  const trail = parseTrail(params.get("trail") || "");
   el.innerHTML = `<div class="page-head"><h1>Activity</h1><p class="muted">Loading…</p></div>`;
   if (view === "ledger") {
-    await renderLedger(el, appID, { q, userID, entryType: params.get("entry_type") || "" });
+    await renderLedger(el, appID, {
+      q, userID, entryType: params.get("entry_type") || "", cursor, trail,
+    });
     return;
   }
   await renderPurchases(el, appID, {
     q, userID,
     status: params.get("status") || "",
     provider: params.get("provider") || "",
+    cursor, trail,
   });
 }
 
 function tabs(appID, view, filters) {
-  const purchases = hashFor(appID, "purchases", { q: filters.q, user_id: filters.userID });
-  const ledger = hashFor(appID, "ledger", { q: filters.q, user_id: filters.userID });
+  const base = { q: filters.q, user_id: filters.userID };
+  const purchases = hashFor(appID, "purchases", base);
+  const ledger = hashFor(appID, "ledger", base);
   return `<nav class="act-tabs" aria-label="Activity views">
     <a href="${esc(purchases)}"${view === "purchases" ? ' aria-current="page"' : ""}>Purchases</a>
     <a href="${esc(ledger)}"${view === "ledger" ? ' aria-current="page"' : ""}>Ledger</a>
@@ -111,18 +146,22 @@ function pageHead(subtitle, count, countLabel) {
 }
 
 async function renderPurchases(el, appID, filters) {
-  const qs = new URLSearchParams({ limit: "50" });
+  const page = filters.trail.length + 1;
+  const qs = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (filters.q) qs.set("q", filters.q);
   if (filters.userID) qs.set("user_id", filters.userID);
   if (filters.status) qs.set("status", filters.status);
   if (filters.provider) qs.set("provider", filters.provider);
+  if (filters.cursor) qs.set("cursor", filters.cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/purchases?" + qs.toString());
   const items = data.items || [];
+  const total = Number(data.total ?? items.length);
+  const nextCursor = data.next_cursor || "";
   const rows = items.map((p, i) => {
     const money = moneyLabel(p.amount, p.currency);
     const ref = p.payment_ref || p.provider_ref || "";
     return `<tr class="act-row" data-reveal="${i}">
-      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td class="user-idx" aria-hidden="true">${String((page - 1) * PAGE_SIZE + i + 1).padStart(2, "0")}</td>
       <td class="user-when">${esc(fmtTime(p.created_at))}</td>
       <td>${userCell(appID, p.user_id, p.user_email)}</td>
       <td>${providerMark(p.provider)}</td>
@@ -139,8 +178,12 @@ async function renderPurchases(el, appID, filters) {
     </tr>`;
   }).join("") || `<tr><td colspan="10" class="empty user-empty-row">No purchases.</td></tr>`;
 
+  const filterState = {
+    q: filters.q, user_id: filters.userID, status: filters.status, provider: filters.provider,
+  };
+
   el.innerHTML = `
-    ${pageHead("Credit-pack purchases across Stripe and mobile IAP.", items.length, "Purchases shown")}
+    ${pageHead("Credit-pack purchases across Stripe and mobile IAP.", total, "Purchases total")}
     ${tabs(appID, "purchases", filters)}
     <form id="filters" class="toolbar user-search act-filters">
       <label class="user-search__label" for="act-q">Filter</label>
@@ -171,7 +214,8 @@ async function renderPurchases(el, appID, filters) {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${pagerHTML(page, items.length, nextCursor, filters.trail.length, "act")}`;
 
   wireMobileSelect(el.querySelector("#act-status"), { title: "Status" });
   wireMobileSelect(el.querySelector("#act-provider"), { title: "Provider" });
@@ -187,21 +231,40 @@ async function renderPurchases(el, appID, filters) {
       provider: String(fd.get("provider") || ""),
     });
   });
+
+  el.querySelector("#act-prev").addEventListener("click", () => {
+    if (!filters.trail.length) return;
+    const prev = filters.trail[filters.trail.length - 1] || "";
+    location.hash = hashFor(appID, "purchases", {
+      ...filterState, cursor: prev, trail: filters.trail.slice(0, -1),
+    });
+  });
+
+  el.querySelector("#act-next").addEventListener("click", () => {
+    if (!nextCursor) return;
+    location.hash = hashFor(appID, "purchases", {
+      ...filterState, cursor: nextCursor, trail: [...filters.trail, filters.cursor],
+    });
+  });
 }
 
 async function renderLedger(el, appID, filters) {
-  const qs = new URLSearchParams({ limit: "50" });
+  const page = filters.trail.length + 1;
+  const qs = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (filters.q) qs.set("q", filters.q);
   if (filters.userID) qs.set("user_id", filters.userID);
   if (filters.entryType) qs.set("entry_type", filters.entryType);
+  if (filters.cursor) qs.set("cursor", filters.cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/ledger?" + qs.toString());
   const items = data.items || [];
+  const total = Number(data.total ?? items.length);
+  const nextCursor = data.next_cursor || "";
   const rows = items.map((e, i) => {
     const ref = [e.reference_type, e.reference_id].filter(Boolean).join(" ");
     const amount = Number(e.amount);
     const amountClass = Number.isFinite(amount) && amount < 0 ? "act-num act-num--neg" : "act-num act-num--pos";
     return `<tr class="act-row" data-reveal="${i}">
-      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
+      <td class="user-idx" aria-hidden="true">${String((page - 1) * PAGE_SIZE + i + 1).padStart(2, "0")}</td>
       <td class="user-when">${esc(fmtTime(e.created_at))}</td>
       <td>${userCell(appID, e.user_id, e.user_email)}</td>
       <td><span class="act-type mono">${esc(e.entry_type)}</span></td>
@@ -213,8 +276,12 @@ async function renderLedger(el, appID, filters) {
     </tr>`;
   }).join("") || `<tr><td colspan="9" class="empty user-empty-row">No ledger entries.</td></tr>`;
 
+  const filterState = {
+    q: filters.q, user_id: filters.userID, entry_type: filters.entryType,
+  };
+
   el.innerHTML = `
-    ${pageHead("Credit movements — purchases, usage, refunds, and admin adjusts.", items.length, "Ledger entries shown")}
+    ${pageHead("Credit movements — purchases, usage, refunds, and admin adjusts.", total, "Ledger entries total")}
     ${tabs(appID, "ledger", filters)}
     <form id="filters" class="toolbar user-search act-filters">
       <label class="user-search__label" for="act-ledger-q">Filter</label>
@@ -239,7 +306,8 @@ async function renderLedger(el, appID, filters) {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${pagerHTML(page, items.length, nextCursor, filters.trail.length, "act")}`;
 
   wireMobileSelect(el.querySelector("#act-entry-type"), { title: "Type" });
   applyRevealDelays(el, ".act-row[data-reveal]");
@@ -251,6 +319,21 @@ async function renderLedger(el, appID, filters) {
       q: String(fd.get("q") || "").trim(),
       user_id: String(fd.get("user_id") || "").trim(),
       entry_type: String(fd.get("entry_type") || ""),
+    });
+  });
+
+  el.querySelector("#act-prev").addEventListener("click", () => {
+    if (!filters.trail.length) return;
+    const prev = filters.trail[filters.trail.length - 1] || "";
+    location.hash = hashFor(appID, "ledger", {
+      ...filterState, cursor: prev, trail: filters.trail.slice(0, -1),
+    });
+  });
+
+  el.querySelector("#act-next").addEventListener("click", () => {
+    if (!nextCursor) return;
+    location.hash = hashFor(appID, "ledger", {
+      ...filterState, cursor: nextCursor, trail: [...filters.trail, filters.cursor],
     });
   });
 }

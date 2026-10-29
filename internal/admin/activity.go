@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/builtly/builtly/internal/apperr"
 	"github.com/builtly/builtly/internal/billing"
 	"github.com/builtly/builtly/internal/credit"
+	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/platform/httpx"
 )
 
@@ -36,10 +38,22 @@ func (h *Handler) listAppPurchases(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	rows, err := h.purchases.ListAppPurchases(r.Context(), nil, appID, billing.PurchaseListQuery{
-		Status: status, Provider: provider, UserID: userID, UserQ: userQ, Limit: limit,
-	})
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	filter := billing.PurchaseListQuery{
+		Status: status, Provider: provider, UserID: userID, UserQ: userQ,
+		Limit: limit, After: after, AfterID: afterID,
+	}
+	rows, err := h.purchases.ListAppPurchases(r.Context(), nil, appID, filter)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	total, err := h.purchases.CountAppPurchases(r.Context(), nil, appID, filter)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -71,7 +85,12 @@ func (h *Handler) listAppPurchases(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
+	if len(rows) == limit && limit > 0 {
+		last := rows[len(rows)-1]
+		resp["next_cursor"] = keysetCursor(last.CreatedAt, last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) listAppLedger(w http.ResponseWriter, r *http.Request) {
@@ -90,10 +109,22 @@ func (h *Handler) listAppLedger(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	rows, err := h.credits.ListAppLedger(r.Context(), appID, credit.AppLedgerQuery{
-		EntryType: entryType, UserID: userID, UserQ: userQ, Limit: limit,
-	})
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	filter := credit.AppLedgerQuery{
+		EntryType: entryType, UserID: userID, UserQ: userQ,
+		Limit: limit, After: after, AfterID: afterID,
+	}
+	rows, err := h.credits.ListAppLedger(r.Context(), appID, filter)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	total, err := h.credits.CountAppLedger(r.Context(), appID, filter)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -109,7 +140,12 @@ func (h *Handler) listAppLedger(w http.ResponseWriter, r *http.Request) {
 			"metadata": json.RawMessage(e.Metadata), "created_at": e.CreatedAt,
 		})
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
+	resp := map[string]any{"items": items, "total": total, "next_cursor": nil}
+	if len(rows) == limit && limit > 0 {
+		last := rows[len(rows)-1]
+		resp["next_cursor"] = keysetCursor(last.CreatedAt, last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func activityUserFilter(r *http.Request) (*uuid.UUID, string, error) {
@@ -183,4 +219,19 @@ func knownEntryType(s string) bool {
 	default:
 		return false
 	}
+}
+
+func clampPageLimit(raw string) int {
+	limit, _ := strconv.Atoi(raw)
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
+}
+
+func keysetCursor(createdAt db.Time, id uuid.UUID) string {
+	return time.Time(createdAt).UTC().Format(time.RFC3339Nano) + "," + id.String()
 }

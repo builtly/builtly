@@ -129,28 +129,48 @@ func (s *Store) RetryDead(ctx context.Context, id uuid.UUID, now db.Time) error 
 	return nil
 }
 
-// List filters outbox rows.
-func (s *Store) List(ctx context.Context, status, subscriber string, limit int) ([]Row, error) {
+func outboxListWhere(status, subscriber string) (string, []any) {
+	where := `WHERE 1=1`
+	var args []any
+	if status != "" {
+		where += ` AND status = ?`
+		args = append(args, status)
+	}
+	if subscriber != "" {
+		where += ` AND subscriber = ?`
+		args = append(args, subscriber)
+	}
+	return where, args
+}
+
+// Count returns how many outbox rows match the filters.
+func (s *Store) Count(ctx context.Context, status, subscriber string) (int, error) {
+	where, args := outboxListWhere(status, subscriber)
+	var n int
+	err := s.db.GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM outbox `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	return n, nil
+}
+
+// List filters outbox rows with optional keyset cursor (created_at DESC, id DESC).
+func (s *Store) List(ctx context.Context, status, subscriber string, limit int, after db.Time, afterID uuid.UUID) ([]Row, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	var (
-		rows []Row
-		err  error
-	)
-	switch {
-	case status != "" && subscriber != "":
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(selectRow+`
-			WHERE status = ? AND subscriber = ? ORDER BY created_at DESC LIMIT ?`), status, subscriber, limit)
-	case status != "":
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(selectRow+`
-			WHERE status = ? ORDER BY created_at DESC LIMIT ?`), status, limit)
-	case subscriber != "":
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(selectRow+`
-			WHERE subscriber = ? ORDER BY created_at DESC LIMIT ?`), subscriber, limit)
-	default:
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(selectRow+` ORDER BY created_at DESC LIMIT ?`), limit)
+	if limit > 100 {
+		limit = 100
 	}
+	where, args := outboxListWhere(status, subscriber)
+	if afterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, after, after, afterID)
+	}
+	args = append(args, limit)
+	var rows []Row
+	err := s.db.SelectContext(ctx, &rows, s.db.Rebind(selectRow+` `+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	return rows, db.MapError(err)
 }
 

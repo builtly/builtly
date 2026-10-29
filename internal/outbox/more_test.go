@@ -81,7 +81,7 @@ func TestOutboxListAndRetryDead(t *testing.T) {
 	if _, err := d.Tick(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := store.List(context.Background(), "dead", outbox.SubEmail, 10)
+	rows, err := store.List(context.Background(), "dead", outbox.SubEmail, 10, db.Time{}, uuid.Nil)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("list dead: %v n=%d", err, len(rows))
 	}

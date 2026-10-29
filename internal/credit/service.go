@@ -45,6 +45,11 @@ func (s *Service) ListAppLedger(ctx context.Context, appID uuid.UUID, filter App
 	return s.store.ListAppEntries(ctx, nil, appID, filter)
 }
 
+// CountAppLedger counts ledger entries for an app under the same filters as ListAppLedger.
+func (s *Service) CountAppLedger(ctx context.Context, appID uuid.UUID, filter AppLedgerQuery) (int, error) {
+	return s.store.CountAppEntries(ctx, nil, appID, filter)
+}
+
 // GetByReference loads a ledger entry by type and reference.
 func (s *Service) GetByReference(ctx context.Context, appID uuid.UUID, entryType, refType, refID string) (Entry, error) {
 	return s.store.GetByReference(ctx, nil, appID, entryType, refType, refID)

@@ -17,6 +17,7 @@ import (
 	"github.com/builtly/builtly/internal/email"
 	"github.com/builtly/builtly/internal/integration"
 	"github.com/builtly/builtly/internal/outbox"
+	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/platform/db/dbtest"
 	"github.com/builtly/builtly/internal/platform/secrets"
 	"github.com/builtly/builtly/internal/tenant"
@@ -187,7 +188,7 @@ func TestEmailSubscriberVerifyMail(t *testing.T) {
 	if !strings.Contains(msg.From, "noreply@acme.com") {
 		t.Fatalf("from %q", msg.From)
 	}
-	done, _ := store.List(context.Background(), outbox.StatusDone, outbox.SubEmail, 10)
+	done, _ := store.List(context.Background(), outbox.StatusDone, outbox.SubEmail, 10, db.Time{}, uuid.Nil)
 	if len(done) != 1 {
 		t.Fatalf("done rows: %#v", done)
 	}

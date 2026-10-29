@@ -50,47 +50,61 @@ func (s *AuditStore) Insert(ctx context.Context, q db.Querier, e AuditEntry) err
 	return db.MapError(err)
 }
 
-// List returns recent audit entries with optional filters.
-func (s *AuditStore) List(ctx context.Context, appID *uuid.UUID, action string, limit int) ([]AuditEntry, error) {
+func auditListWhere(appID *uuid.UUID, action string) (string, []any) {
+	where := `WHERE 1=1`
+	var args []any
+	if appID != nil {
+		where += ` AND app_id = ?`
+		args = append(args, *appID)
+	}
+	if action != "" {
+		where += ` AND action = ?`
+		args = append(args, action)
+	}
+	return where, args
+}
+
+// Count returns how many audit entries match the filters.
+func (s *AuditStore) Count(ctx context.Context, appID *uuid.UUID, action string) (int, error) {
+	where, args := auditListWhere(appID, action)
+	var n int
+	err := s.db.GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM admin_audit_log `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	return n, nil
+}
+
+// List returns recent audit entries with optional filters and keyset cursor.
+func (s *AuditStore) List(ctx context.Context, appID *uuid.UUID, action string, limit int, after db.Time, afterID uuid.UUID) ([]AuditEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	var (
-		rows []struct {
-			ID         uuid.UUID  `db:"id"`
-			Actor      string     `db:"actor"`
-			Action     string     `db:"action"`
-			AppID      *uuid.UUID `db:"app_id"`
-			TargetType string     `db:"target_type"`
-			TargetID   string     `db:"target_id"`
-			Diff       []byte     `db:"diff"`
-			IP         string     `db:"ip"`
-			RequestID  string     `db:"request_id"`
-			CreatedAt  db.Time    `db:"created_at"`
-		}
-		err error
-	)
-	switch {
-	case appID != nil && action != "":
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(`
-			SELECT id, actor, action, app_id, target_type, target_id, diff, ip, request_id, created_at
-			FROM admin_audit_log WHERE app_id = ? AND action = ?
-			ORDER BY created_at DESC LIMIT ?`), *appID, action, limit)
-	case appID != nil:
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(`
-			SELECT id, actor, action, app_id, target_type, target_id, diff, ip, request_id, created_at
-			FROM admin_audit_log WHERE app_id = ?
-			ORDER BY created_at DESC LIMIT ?`), *appID, limit)
-	case action != "":
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(`
-			SELECT id, actor, action, app_id, target_type, target_id, diff, ip, request_id, created_at
-			FROM admin_audit_log WHERE action = ?
-			ORDER BY created_at DESC LIMIT ?`), action, limit)
-	default:
-		err = s.db.SelectContext(ctx, &rows, s.db.Rebind(`
-			SELECT id, actor, action, app_id, target_type, target_id, diff, ip, request_id, created_at
-			FROM admin_audit_log ORDER BY created_at DESC LIMIT ?`), limit)
+	if limit > 100 {
+		limit = 100
 	}
+	where, args := auditListWhere(appID, action)
+	if afterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, after, after, afterID)
+	}
+	args = append(args, limit)
+	var rows []struct {
+		ID         uuid.UUID  `db:"id"`
+		Actor      string     `db:"actor"`
+		Action     string     `db:"action"`
+		AppID      *uuid.UUID `db:"app_id"`
+		TargetType string     `db:"target_type"`
+		TargetID   string     `db:"target_id"`
+		Diff       []byte     `db:"diff"`
+		IP         string     `db:"ip"`
+		RequestID  string     `db:"request_id"`
+		CreatedAt  db.Time    `db:"created_at"`
+	}
+	err := s.db.SelectContext(ctx, &rows, s.db.Rebind(`
+		SELECT id, actor, action, app_id, target_type, target_id, diff, ip, request_id, created_at
+		FROM admin_audit_log `+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	if err != nil {
 		return nil, db.MapError(err)
 	}

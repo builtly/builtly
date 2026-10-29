@@ -148,13 +148,9 @@ func (s *Store) ListByReferrer(ctx context.Context, q db.Querier, appID, referre
 	return rows, db.MapError(err)
 }
 
-// ListAdmin lists referrals for an app with optional filters.
-func (s *Store) ListAdmin(ctx context.Context, q db.Querier, appID uuid.UUID, referrerID *uuid.UUID, status string, limit int, after db.Time, afterID uuid.UUID) ([]Referral, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 20
-	}
-	args := []any{appID}
+func referralAdminWhere(appID uuid.UUID, referrerID *uuid.UUID, status string) (string, []any) {
 	where := `WHERE app_id = ?`
+	args := []any{appID}
 	if referrerID != nil {
 		where += ` AND referrer_user_id = ?`
 		args = append(args, *referrerID)
@@ -163,18 +159,37 @@ func (s *Store) ListAdmin(ctx context.Context, q db.Querier, appID uuid.UUID, re
 		where += ` AND status = ?`
 		args = append(args, status)
 	}
-	var rows []Referral
-	var err error
-	if afterID == uuid.Nil {
-		args = append(args, limit)
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectReferral+` `+where+`
-			ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
-	} else {
-		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
-		args = append(args, after, after, afterID, limit)
-		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectReferral+` `+where+`
-			ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
+	return where, args
+}
+
+// CountAdmin counts referrals for an app with optional filters.
+func (s *Store) CountAdmin(ctx context.Context, q db.Querier, appID uuid.UUID, referrerID *uuid.UUID, status string) (int, error) {
+	where, args := referralAdminWhere(appID, referrerID, status)
+	var n int
+	err := s.q(q).GetContext(ctx, &n, s.db.Rebind(`SELECT COUNT(*) FROM referrals `+where), args...)
+	if err != nil {
+		return 0, db.MapError(err)
 	}
+	return n, nil
+}
+
+// ListAdmin lists referrals for an app with optional filters.
+func (s *Store) ListAdmin(ctx context.Context, q db.Querier, appID uuid.UUID, referrerID *uuid.UUID, status string, limit int, after db.Time, afterID uuid.UUID) ([]Referral, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	where, args := referralAdminWhere(appID, referrerID, status)
+	if afterID != uuid.Nil {
+		where += ` AND (created_at < ? OR (created_at = ? AND id < ?))`
+		args = append(args, after, after, afterID)
+	}
+	args = append(args, limit)
+	var rows []Referral
+	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(selectReferral+` `+where+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`), args...)
 	return rows, db.MapError(err)
 }
 

@@ -250,6 +250,12 @@ func (s *Service) ListAdmin(ctx context.Context, appID uuid.UUID, referrerID *uu
 	if err != nil {
 		return nil, "", ErrValidation
 	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	rows, err := s.store.ListAdmin(ctx, nil, appID, referrerID, status, limit, after, afterID)
 	if err != nil {
 		return nil, "", err
@@ -260,6 +266,11 @@ func (s *Service) ListAdmin(ctx context.Context, appID uuid.UUID, referrerID *uu
 		next = time.Time(last.CreatedAt).UTC().Format(time.RFC3339Nano) + "," + last.ID.String()
 	}
 	return rows, next, nil
+}
+
+// CountAdmin counts referrals for admin under the same filters as ListAdmin.
+func (s *Service) CountAdmin(ctx context.Context, appID uuid.UUID, referrerID *uuid.UUID, status string) (int, error) {
+	return s.store.CountAdmin(ctx, nil, appID, referrerID, status)
 }
 
 // VoidAsReferee is called on account deletion.
@@ -277,11 +288,11 @@ func parseCursor(cursor string) (db.Time, uuid.UUID, error) {
 	}
 	t, err := time.Parse(time.RFC3339Nano, parts[0])
 	if err != nil {
-		return db.Time{}, uuid.Nil, err
+		return db.Time{}, uuid.Nil, ErrValidation
 	}
 	id, err := uuid.Parse(parts[1])
 	if err != nil {
-		return db.Time{}, uuid.Nil, err
+		return db.Time{}, uuid.Nil, ErrValidation
 	}
 	return db.Time(t), id, nil
 }
