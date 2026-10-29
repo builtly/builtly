@@ -201,6 +201,15 @@ body > #app {
   font-family: inherit;
 }
 
+/* Keep form controls on the same face as page copy (Pico otherwise mixes stacks). */
+.main input,
+.main select,
+.main textarea,
+.main button,
+.main option {
+  font-family: var(--admin-sans);
+}
+
 /* Browsers often ignore input font-family for placeholders unless set explicitly. */
 .main input::placeholder,
 .main textarea::placeholder {
@@ -409,6 +418,10 @@ input[type="reset"],
 
 .form-row > .field {
   flex: 1 1 12rem;
+}
+
+.form-row > .field--full {
+  flex: 1 1 100%;
 }
 
 .form-row label {
@@ -863,6 +876,10 @@ button[data-danger] {
 }
 
 .empty {
+  font-family: var(--admin-sans);
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: normal;
   color: var(--pico-muted-color, #5c6570);
   padding: 1rem 0;
 }
@@ -1030,8 +1047,9 @@ button[data-danger] {
   background: #fff;
   color: var(--user-ink);
   box-shadow: none;
-  font-family: inherit;
+  font-family: var(--admin-sans);
   font-size: 0.9rem;
+  --pico-font-family: var(--admin-sans);
   --pico-border-color: var(--user-ink);
   --pico-background-color: #fff;
   --pico-color: var(--user-ink);
@@ -1039,6 +1057,10 @@ button[data-danger] {
   --pico-form-element-background-color: #fff;
   --pico-form-element-focus-color: var(--user-amber);
   --pico-border-radius: 0.1rem;
+}
+
+.user-adjust select {
+  background-image: none;
 }
 
 .user-search .toolbar-fields {
@@ -1259,12 +1281,22 @@ button[data-danger] {
   justify-content: center;
 }
 
+img.user-avatar {
+  display: block;
+  background: #ebe8e0;
+}
+
 .user-avatar--lg {
   width: 4.5rem;
   height: 4.5rem;
   border-radius: 0.2rem;
   font-size: 1.35rem;
   border-width: 2px;
+}
+
+.user-dossier__avatar {
+  flex: 0 0 auto;
+  line-height: 0;
 }
 
 .user-avatar--fallback {
@@ -1308,13 +1340,14 @@ button[data-danger] {
 }
 
 .user-balance {
-  font-family: var(--admin-mono);
+  font-family: inherit;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
 
 .user-when {
-  font-family: var(--admin-mono);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
   font-size: 0.78rem;
   white-space: nowrap;
 }
@@ -1513,7 +1546,7 @@ button[data-danger] {
 .user-dossier__balance-value {
   display: block;
   margin-top: 0.15rem;
-  font-family: var(--admin-mono);
+  font-family: inherit;
   font-size: 1.9rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1568,9 +1601,21 @@ button[data-danger] {
 
 .user-meta__v {
   display: block;
+  font-family: inherit;
   font-size: 0.9rem;
   color: var(--user-ink);
   word-break: break-word;
+}
+
+.user-meta__v--id {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  word-break: break-all;
+}
+
+.user-ledger-type {
+  font-family: inherit;
+  font-size: 0.85rem;
 }
 
 .user-adjust {
@@ -1616,21 +1661,59 @@ button[data-danger] {
 .user-ledger-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.35rem 1rem;
+  gap: 0.55rem 1rem;
   margin-bottom: 0.45rem;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.45rem;
   border-bottom: 1px solid var(--user-ink);
 }
 
 .user-ledger-head h2 {
   margin: 0;
+  font-family: inherit;
   --pico-typography-spacing-top: 0;
 }
 
-.user-ledger-head p {
+.user-ledger-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.user-ledger-link {
+  display: inline-block;
   margin: 0;
+  padding: 0.28rem 0.55rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  line-height: 1.2;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.1);
+}
+
+.user-ledger-link:hover {
+  color: var(--user-amber);
+  background: var(--user-paper);
+}
+
+.user-empty-row,
+.user-table .empty,
+.user-ledger .empty {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: #8a8490;
+  text-align: center;
+  padding: 1.25rem 0.75rem !important;
 }
 
 .user-pager {

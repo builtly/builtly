@@ -21,12 +21,37 @@ function statusChip(status) {
   return `<span class="user-stamp user-stamp--${esc(s)}">${esc(s)}</span>`;
 }
 
+function avatarFallback(label, sizeClass = "") {
+  return `<span class="user-avatar user-avatar--fallback ${sizeClass}" aria-hidden="true">${esc(label)}</span>`;
+}
+
 function avatarThumb(u, sizeClass = "") {
   const label = initials(u.email, u.display_name);
   if (u.avatar_url) {
-    return `<img class="user-avatar ${sizeClass}" src="${esc(u.avatar_url)}" alt="" width="40" height="40">`;
+    // no-referrer: many R2/CDN public buckets reject hotlinks that send a Referer.
+    return `<img class="user-avatar ${sizeClass}" src="${esc(u.avatar_url)}" alt="" width="40" height="40" referrerpolicy="no-referrer" decoding="async" data-fallback="${esc(label)}">`;
   }
-  return `<span class="user-avatar user-avatar--fallback ${sizeClass}" aria-hidden="true">${esc(label)}</span>`;
+  return avatarFallback(label, sizeClass);
+}
+
+function wireAvatarFallbacks(root) {
+  root.querySelectorAll("img.user-avatar[data-fallback]").forEach((img) => {
+    img.addEventListener("error", () => {
+      const span = document.createElement("span");
+      span.className = img.className + " user-avatar--fallback";
+      span.setAttribute("aria-hidden", "true");
+      span.textContent = img.getAttribute("data-fallback") || "?";
+      img.replaceWith(span);
+    }, { once: true });
+  });
+}
+
+/** Set stagger delays via CSSOM — HTML style="" is blocked by admin CSP style-src. */
+function applyRevealDelays(root, selector) {
+  root.querySelectorAll(selector).forEach((el) => {
+    const n = Number(el.getAttribute("data-reveal") || "0");
+    if (Number.isFinite(n)) el.style.setProperty("--reveal", String(n));
+  });
 }
 
 function cellOrDash(value, mono = false) {
@@ -80,7 +105,7 @@ export async function renderUsers(el, appID) {
   const total = Number(data.total ?? items.length);
   const nextCursor = data.next_cursor || "";
   const rows = items.map((u, i) => `
-    <tr class="user-row" style="--reveal:${i}">
+    <tr class="user-row" data-reveal="${i}">
       <td class="user-idx" aria-hidden="true">${String((page - 1) * pageSize + i + 1).padStart(2, "0")}</td>
       <td>
         <a class="user-identity" href="#/apps/${esc(appID)}/users/${esc(u.id)}">
@@ -99,7 +124,7 @@ export async function renderUsers(el, appID) {
       <td class="user-ip">${cellOrDash(u.last_ip, true)}</td>
       <td class="user-when">${esc(fmtTime(u.created_at))}</td>
       <td class="muted user-when">${esc(fmtTime(u.last_login_at))}</td>
-    </tr>`).join("") || `<tr><td colspan="10" class="empty">No users.</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="10" class="empty user-empty-row">No users.</td></tr>`;
 
   el.innerHTML = `
     <div class="page-head page-head-row user-page-head">
@@ -162,6 +187,9 @@ export async function renderUsers(el, appID) {
     location.hash = usersHash(appID, { q, cursor: nextCursor, trail: [...trail, cursor] });
     renderUsers(el, appID);
   });
+
+  wireAvatarFallbacks(el);
+  applyRevealDelays(el, ".user-row[data-reveal]");
 }
 
 export async function renderUserDetail(el, appID, userID) {
@@ -170,14 +198,14 @@ export async function renderUserDetail(el, appID, userID) {
   const user = await api("GET", base);
   const ledger = await api("GET", base + "/ledger?limit=50");
   const ledgerRows = (ledger.items || []).map((e, i) => `
-    <tr class="user-ledger-row" style="--reveal:${i}">
+    <tr class="user-ledger-row" data-reveal="${i}">
       <td class="user-when">${esc(fmtTime(e.created_at))}</td>
-      <td class="mono">${esc(e.entry_type)}</td>
+      <td class="user-ledger-type">${esc(e.entry_type)}</td>
       <td class="user-balance">${esc(e.amount)}</td>
       <td class="user-balance">${esc(e.balance_after)}</td>
       <td>${esc(e.actor)}</td>
       <td>${esc(e.reason || "")}</td>
-    </tr>`).join("") || `<tr><td colspan="6" class="empty">No ledger entries.</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="6" class="empty user-empty-row">No ledger entries.</td></tr>`;
 
   const clearDebtBtn = user.balance < 0
     ? `<button type="button" class="danger" id="clear-debt">Clear debt</button>`
@@ -197,7 +225,7 @@ export async function renderUserDetail(el, appID, userID) {
       </div>
       <div class="user-dossier__body">
         <div class="user-dossier__meta-line">
-          <span class="user-dossier__ref mono">REF ${esc(shortRef(user.id))}</span>
+          <span class="user-dossier__ref">REF ${esc(shortRef(user.id))}</span>
           ${statusChip(user.status)}
         </div>
         <h1 class="user-dossier__title">${esc(title)}</h1>
@@ -217,9 +245,9 @@ export async function renderUserDetail(el, appID, userID) {
     </header>
 
     <section class="user-meta-grid" aria-label="Profile fields">
-      <div class="user-meta">
+      <div class="user-meta user-meta--wide">
         <span class="user-meta__k">User ID</span>
-        <span class="user-meta__v mono">${esc(user.id)}</span>
+        <span class="user-meta__v user-meta__v--id">${esc(user.id)}</span>
       </div>
       <div class="user-meta">
         <span class="user-meta__k">Locale</span>
@@ -227,7 +255,7 @@ export async function renderUserDetail(el, appID, userID) {
       </div>
       <div class="user-meta">
         <span class="user-meta__k">Last IP</span>
-        <span class="user-meta__v mono">${esc(user.last_ip || "—")}</span>
+        <span class="user-meta__v">${esc(user.last_ip || "—")}</span>
       </div>
       <div class="user-meta">
         <span class="user-meta__k">UTM source</span>
@@ -240,12 +268,6 @@ export async function renderUserDetail(el, appID, userID) {
       <div class="user-meta">
         <span class="user-meta__k">Created</span>
         <span class="user-meta__v">${esc(fmtTime(user.created_at))}</span>
-      </div>
-      <div class="user-meta user-meta--wide">
-        <span class="user-meta__k">Avatar URL</span>
-        <span class="user-meta__v">${user.avatar_url
-          ? `<a href="${esc(user.avatar_url)}" target="_blank" rel="noopener">${esc(user.avatar_url)}</a>`
-          : "—"}</span>
       </div>
     </section>
 
@@ -273,8 +295,10 @@ export async function renderUserDetail(el, appID, userID) {
 
     <div class="user-ledger-head">
       <h2>Ledger</h2>
-      <p class="muted"><a href="#/apps/${esc(appID)}/activity?view=ledger&user_id=${esc(userID)}">App ledger</a>
-        · <a href="#/apps/${esc(appID)}/activity?user_id=${esc(userID)}">App purchases</a></p>
+      <div class="user-ledger-links" aria-label="Related activity">
+        <a class="user-ledger-link" href="#/apps/${esc(appID)}/activity?view=ledger&user_id=${esc(userID)}">App ledger</a>
+        <a class="user-ledger-link" href="#/apps/${esc(appID)}/activity?user_id=${esc(userID)}">App purchases</a>
+      </div>
     </div>
     <div class="table-wrap user-ledger-wrap">
     <table class="user-ledger">
@@ -313,4 +337,7 @@ export async function renderUserDetail(el, appID, userID) {
     showOk("Credits adjusted");
     await renderUserDetail(el, appID, userID);
   });
+
+  wireAvatarFallbacks(el);
+  applyRevealDelays(el, ".user-ledger-row[data-reveal]");
 }

@@ -270,7 +270,7 @@ web/
 - Served by `http.FileServerFS(fs.Sub(web.Admin, "admin"))` under `/admin/`, with SPA fallback to `index.html` for unknown sub-paths.
 - No bundler, no CDN, no Node build. UI libraries are **vendored** under `admin/vendor/` and embedded. The UI talks only to `/api/v1/admin/*`.
 - Alpine uses the **CSP build** (`@alpinejs/csp`) so expressions do not require `'unsafe-eval'`. After `innerHTML` updates, call `Alpine.initTree(el)`.
-- Response headers on `/admin/*`: `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`, `X-Frame-Options: DENY`, `Cache-Control: no-cache` (assets carry an `?v=<build version>` query).
+- Response headers on `/admin/*`: `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`, `X-Frame-Options: DENY`, `Cache-Control: no-cache` (assets carry an `?v=<build version>` query). `img-src https:` covers OAuth/R2 avatar URLs.
 - `BUILTLY_ADMIN_ENABLED=false` removes both the UI and the admin API routes.
 
 #### 1.4.2 Authentication

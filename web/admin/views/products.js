@@ -70,7 +70,7 @@ export async function renderProducts(el, appID) {
             <div class="field"><label>Currency</label><input name="currency" value="usd" required></div>
           </div>
           <div class="form-row">
-            <div class="field" style="flex:1 1 100%"><label>Description</label><input name="description"></div>
+            <div class="field field--full"><label>Description</label><input name="description"></div>
           </div>
           <div class="form-row">
             <div class="field"><label>Stripe price ID</label><input name="stripe_price_id" placeholder="price_…"></div>

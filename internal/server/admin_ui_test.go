@@ -21,7 +21,7 @@ import (
 	"github.com/builtly/builtly/internal/tenant"
 )
 
-const wantAdminCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+const wantAdminCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 func adminUIServer(t *testing.T, adminEnabled bool) *server.Server {
 	t.Helper()

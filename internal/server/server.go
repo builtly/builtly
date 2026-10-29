@@ -211,7 +211,8 @@ func (s *Server) buildRouter() chi.Router {
 	return r
 }
 
-const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+// img-src allows https: so admin can render user avatars from GitHub/Google/R2 CDNs.
+const adminCSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 func adminUIHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

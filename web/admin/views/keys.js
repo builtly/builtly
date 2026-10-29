@@ -38,10 +38,10 @@ export async function renderKeys(el, appID) {
         <div id="key-form-panel">
           <form id="create-key">
             <div class="form-row">
-              <div class="field" style="flex:1 1 100%"><label>Name</label><input name="name" required autocomplete="off" placeholder="e.g. production"></div>
+              <div class="field field--full"><label>Name</label><input name="name" required autocomplete="off" placeholder="e.g. production"></div>
             </div>
             <div class="form-row">
-              <div class="field" style="flex:1 1 100%">
+              <div class="field field--full">
                 <label>Scopes (comma-separated, optional)</label>
                 <input name="scopes" placeholder="leave empty for default">
               </div>
