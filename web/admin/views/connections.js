@@ -282,6 +282,19 @@ function secretsHint(secrets) {
   return keys.map((k) => `${k} ${secrets[k]}`).join(", ");
 }
 
+function shortRef(id) {
+  if (!id) return "—";
+  return id.length > 10 ? id.slice(0, 8) : id;
+}
+
+/** Set stagger delays via CSSOM — HTML style="" is blocked by admin CSP style-src. */
+function applyRevealDelays(root, selector) {
+  root.querySelectorAll(selector).forEach((node) => {
+    const n = Number(node.getAttribute("data-reveal") || "0");
+    if (Number.isFinite(n)) node.style.setProperty("--reveal", String(n));
+  });
+}
+
 function providerNav(active) {
   // Use a plain div — Pico's `nav`/`ul` defaults are horizontal flex and break this rail.
   return `<div class="conn-nav" role="navigation" aria-label="Providers">
@@ -290,7 +303,7 @@ function providerNav(active) {
         <div class="conn-nav-label">${esc(g.label)}</div>
         ${g.providers.map((p) => {
           const cur = p === active ? ' aria-current="page"' : "";
-          return `<a href="#/connections?provider=${encodeURIComponent(p)}"${cur}>${esc(SCHEMAS[p].label)}</a>`;
+          return `<a class="conn-nav__link" href="#/connections?provider=${encodeURIComponent(p)}"${cur}>${esc(SCHEMAS[p].label)}</a>`;
         }).join("")}
       </div>`).join("")}
   </div>`;
@@ -342,8 +355,8 @@ function formMarkup(schema, { mode, values }) {
       <input id="conn-name" name="name" required value="${esc(st.name || "")}" placeholder="${esc(schema.label)} production" autocomplete="off">
     </div>
     ${blocks}
-    <div class="form-actions">
-      <button type="button" class="secondary outline cancel-drawer">Cancel</button>
+    <div class="form-actions conn-form-actions">
+      <button type="button" class="secondary cancel-drawer">Cancel</button>
       <button type="submit">${forEdit ? "Save changes" : "Create connection"}</button>
     </div>`;
 }
@@ -362,8 +375,11 @@ function openDrawer(el, title, bodyHTML) {
   const drawer = el.querySelector("#conn-drawer");
   drawer.innerHTML = `
     <div class="conn-drawer-head">
-      <h3>${esc(title)}</h3>
-      <button type="button" class="secondary outline cancel-drawer" aria-label="Close">✕</button>
+      <div>
+        <p class="user-kicker">Connection</p>
+        <h3>${esc(title)}</h3>
+      </div>
+      <button type="button" class="secondary cancel-drawer conn-drawer__close" aria-label="Close">✕</button>
     </div>
     ${bodyHTML}`;
   drawer.hidden = false;
@@ -388,9 +404,12 @@ export async function renderConnections(el) {
   const group = PROVIDER_GROUPS.find((g) => g.providers.includes(provider));
 
   el.innerHTML = `
-    <div class="page-head">
-      <h1>Connections</h1>
-      <p class="muted">Encrypted provider credentials shared across apps.</p>
+    <div class="page-head page-head-row user-page-head">
+      <div>
+        <p class="user-kicker">Platform · credentials</p>
+        <h1 class="user-page-title">Connections</h1>
+        <p class="muted">Encrypted provider credentials shared across apps.</p>
+      </div>
     </div>
     <div class="conn-layout">
       ${providerNav(provider)}
@@ -400,48 +419,56 @@ export async function renderConnections(el) {
   const data = await api("GET", "/connections?provider=" + encodeURIComponent(provider));
   const items = data.items || [];
 
-  const rows = items.map((c) => {
+  const rows = items.map((c, i) => {
     const usedN = (c.used_by_apps || []).length;
-    const used = usedN ? `${usedN} app${usedN === 1 ? "" : "s"}` : "—";
+    const used = usedN ? `${usedN} app${usedN === 1 ? "" : "s"}` : "";
     const ro = c.read_only;
     const actions = ro
-      ? `<span class="tag">env</span>`
-      : `<div class="row-actions">
-          <button type="button" class="secondary outline edit-conn" data-id="${esc(c.id)}">Edit</button>
-          <button type="button" class="outline danger del-conn" data-id="${esc(c.id)}">Delete</button>
+      ? `<span class="user-stamp user-stamp--unknown">env</span>`
+      : `<div class="conn-row-actions">
+          <button type="button" class="conn-edit edit-conn" data-id="${esc(c.id)}">Edit</button>
+          <button type="button" class="conn-del del-conn" data-id="${esc(c.id)}">Delete</button>
         </div>`;
     const webhook = c.webhook_url
-      ? `<button type="button" class="secondary outline copy-url" data-url="${esc(c.webhook_url)}" title="${esc(c.webhook_url)}">Copy URL</button>`
-      : "—";
-    return `<tr data-conn-id="${esc(c.id)}">
+      ? `<button type="button" class="conn-copy copy-url" data-url="${esc(c.webhook_url)}" title="${esc(c.webhook_url)}">Copy URL</button>`
+      : `<span class="user-empty">—</span>`;
+    return `<tr class="conn-row" data-conn-id="${esc(c.id)}" data-reveal="${i}">
+      <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
       <td>
-        <div class="conn-name">${esc(c.name)}</div>
-        <div class="mono muted truncate" title="${esc(c.id)}">${esc(c.id)}</div>
+        <div class="conn-identity">
+          <span class="conn-identity__name">${esc(c.name)}</span>
+          <span class="conn-identity__id mono" title="${esc(c.id)}">${esc(shortRef(c.id))}</span>
+        </div>
       </td>
-      <td class="cell-wrap">${esc(primarySetting(provider, c.settings))}</td>
-      <td class="mono muted">${secretsHint(c.secrets)}</td>
-      <td>${webhook}</td>
-      <td class="muted">${used}</td>
-      <td class="actions">${actions}</td>
+      <td class="conn-config">${esc(primarySetting(provider, c.settings))}</td>
+      <td class="conn-secrets mono">${esc(secretsHint(c.secrets))}</td>
+      <td class="conn-webhook">${webhook}</td>
+      <td class="conn-used">${used ? esc(used) : `<span class="user-empty">—</span>`}</td>
+      <td class="conn-actions">${actions}</td>
     </tr>`;
   }).join("");
 
   el.querySelector(".conn-panel").innerHTML = `
     <div class="conn-toolbar">
       <div>
+        <p class="user-kicker">${esc(group ? group.label : "Provider")}</p>
         <div class="conn-title">${esc(schema.label)}</div>
-        <div class="muted">${esc(group ? group.label : "")} · ${items.length} connection${items.length === 1 ? "" : "s"}</div>
+        <p class="muted">${items.length} connection${items.length === 1 ? "" : "s"}</p>
       </div>
-      <button type="button" id="conn-add">Add connection</button>
+      <div class="conn-toolbar__actions">
+        <div class="user-count" aria-label="Connections">${items.length}</div>
+        <button type="button" class="conn-create" id="conn-add">Add connection</button>
+      </div>
     </div>
 
     <div id="conn-drawer" class="conn-drawer" hidden></div>
 
     ${items.length
-      ? `<div class="table-wrap conn-table">
-          <table>
+      ? `<div class="table-wrap apps-table-wrap conn-table-wrap">
+          <table class="apps-table conn-table">
             <thead>
               <tr>
+                <th class="user-idx-h"></th>
                 <th>Name</th>
                 <th>Config</th>
                 <th>Secrets</th>
@@ -455,8 +482,10 @@ export async function renderConnections(el) {
         </div>`
       : `<div class="conn-empty">
           <p>No ${esc(schema.label)} connections yet.</p>
-          <button type="button" class="secondary" id="conn-add-empty">Add the first one</button>
+          <button type="button" class="conn-create" id="conn-add-empty">Add the first one</button>
         </div>`}`;
+
+  applyRevealDelays(el, ".conn-row[data-reveal]");
 
   const openCreate = () => {
     openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {} })}</form>`);
