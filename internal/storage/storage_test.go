@@ -402,4 +402,51 @@ func TestAvatarUploadToR2(t *testing.T) {
 	}
 }
 
+func TestCompleteAvatarRejectsNonAvatarFile(t *testing.T) {
+	h := setupStorage(t)
+	app := h.createApp(t)
+	conn := h.createR2ConnWithPublic(t, "https://cdn.example.com")
+	h.bindR2(t, app.ID.String(), conn)
+	access, userID := h.register(t, app, "noavatar@ex.com")
+
+	body, _ := json.Marshal(map[string]any{
+		"filename": "pic.png", "content_type": "image/png", "size_bytes": 4,
+	})
+	req := httptest.NewRequest("POST", "/api/v1/files", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("X-App-ID", app.ID.String())
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("create file: %d %s", rr.Code, rr.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &created)
+	fileID := created["file"].(map[string]any)["id"].(string)
+
+	body, _ = json.Marshal(map[string]any{"file_id": fileID})
+	req = httptest.NewRequest("POST", "/api/v1/user/me/avatar/complete", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("X-App-ID", app.ID.String())
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 400 {
+		t.Fatalf("want 400 for non-avatar file, got %d %s", rr.Code, rr.Body.String())
+	}
+
+	fid, err := uuid.Parse(fileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := h.storage.Store().GetByID(context.Background(), nil, app.ID, userID, fid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Status != storage.StatusPending {
+		t.Fatalf("file status should stay pending, got %q", f.Status)
+	}
+}
+
 func itoa(n int) string { return strconv.Itoa(n) }

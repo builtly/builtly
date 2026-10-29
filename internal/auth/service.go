@@ -27,7 +27,8 @@ type FileMarker interface {
 // AvatarUploader reserves and completes avatar uploads to object storage (R2).
 type AvatarUploader interface {
 	BeginAvatar(ctx context.Context, app tenant.App, userID uuid.UUID, filename, contentType string, sizeBytes int64) (AvatarUploadBegin, error)
-	FinishAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (publicURL string, err error)
+	// FinishAvatar verifies the object and calls bind in the same DB transaction as marking the file uploaded.
+	FinishAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID, bind func(context.Context, db.Querier, string) error) (publicURL string, err error)
 }
 
 // AvatarUploadBegin is the create-avatar response payload.
@@ -503,14 +504,24 @@ func (s *Service) PatchMe(ctx context.Context, appID, userID uuid.UUID, displayN
 	return s.Me(ctx, appID, userID)
 }
 
+func (s *Service) requireActiveUser(ctx context.Context, appID, userID uuid.UUID) error {
+	u, err := s.store.GetByID(ctx, nil, appID, userID)
+	if err != nil || u.Status == StatusDeleted {
+		return ErrUserNotFound
+	}
+	if u.Status == StatusDisabled {
+		return ErrAccountDisabled
+	}
+	return nil
+}
+
 // BeginAvatarUpload reserves an R2 PUT for the user's avatar.
 func (s *Service) BeginAvatarUpload(ctx context.Context, app tenant.App, userID uuid.UUID, filename, contentType string, sizeBytes int64) (AvatarUploadBegin, error) {
 	if s.avatars == nil {
 		return AvatarUploadBegin{}, ErrIntegrationNotConfigured
 	}
-	u, err := s.store.GetByID(ctx, nil, app.ID, userID)
-	if err != nil || u.Status == StatusDeleted {
-		return AvatarUploadBegin{}, ErrUserNotFound
+	if err := s.requireActiveUser(ctx, app.ID, userID); err != nil {
+		return AvatarUploadBegin{}, err
 	}
 	return s.avatars.BeginAvatar(ctx, app, userID, filename, contentType, sizeBytes)
 }
@@ -520,11 +531,16 @@ func (s *Service) CompleteAvatarUpload(ctx context.Context, app tenant.App, user
 	if s.avatars == nil {
 		return MeResponse{}, ErrIntegrationNotConfigured
 	}
-	publicURL, err := s.avatars.FinishAvatar(ctx, app, userID, fileID)
+	if err := s.requireActiveUser(ctx, app.ID, userID); err != nil {
+		return MeResponse{}, err
+	}
+	_, err := s.avatars.FinishAvatar(ctx, app, userID, fileID, func(ctx context.Context, q db.Querier, publicURL string) error {
+		return s.store.UpdateProfile(ctx, q, app.ID, userID, nil, &publicURL, nil, db.Now())
+	})
 	if err != nil {
 		return MeResponse{}, err
 	}
-	return s.PatchMe(ctx, app.ID, userID, nil, &publicURL, nil)
+	return s.Me(ctx, app.ID, userID)
 }
 
 // SetFileMarker wires storage file purge on account deletion.

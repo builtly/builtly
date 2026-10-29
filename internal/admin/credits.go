@@ -151,7 +151,7 @@ func attributionUTM(attr []byte) string {
 		return ""
 	}
 	v, _ := m["utm_source"].(string)
-	return v
+	return strings.TrimSpace(v)
 }
 
 func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {

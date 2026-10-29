@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/storage"
 	"github.com/builtly/builtly/internal/tenant"
 )
@@ -34,6 +35,6 @@ func (a StorageAvatars) BeginAvatar(ctx context.Context, app tenant.App, userID 
 }
 
 // FinishAvatar completes the upload and returns the public avatar URL.
-func (a StorageAvatars) FinishAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (string, error) {
-	return a.Storage.CompleteAvatar(ctx, app, userID, fileID)
+func (a StorageAvatars) FinishAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID, bind func(context.Context, db.Querier, string) error) (string, error) {
+	return a.Storage.CompleteAvatar(ctx, app, userID, fileID, bind)
 }

@@ -367,10 +367,15 @@ func (s *Service) CreateAvatar(ctx context.Context, app tenant.App, userID uuid.
 	return out, nil
 }
 
-// CompleteAvatar verifies the upload and returns a public CDN URL (requires public_base_url).
-func (s *Service) CompleteAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID) (string, error) {
-	f, err := s.Complete(ctx, app, userID, fileID)
+// CompleteAvatar verifies an avatar upload and returns its public CDN URL.
+// Path / public_base_url checks run before mutating file status. When bind is set,
+// MarkUploaded and bind run in one DB transaction so avatar_url cannot lag the file row.
+func (s *Service) CompleteAvatar(ctx context.Context, app tenant.App, userID, fileID uuid.UUID, bind func(context.Context, db.Querier, string) error) (string, error) {
+	f, err := s.store.GetByID(ctx, nil, app.ID, userID, fileID)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return "", ErrFileNotFound
+		}
 		return "", err
 	}
 	if !strings.Contains(f.ObjectKey, "/avatar/") {
@@ -384,7 +389,52 @@ func (s *Service) CompleteAvatar(ctx context.Context, app tenant.App, userID, fi
 		return "", ErrValidationFailed.WithDetails(map[string]any{"reason": "public_base_url required for avatars"})
 	}
 	base := strings.TrimRight(cfg.PublicBaseURL, "/")
-	return base + "/" + strings.TrimPrefix(f.ObjectKey, "/"), nil
+	publicURL := base + "/" + strings.TrimPrefix(f.ObjectKey, "/")
+
+	if f.Status == StatusUploaded {
+		if bind != nil {
+			if err := bind(ctx, nil, publicURL); err != nil {
+				return "", err
+			}
+		}
+		return publicURL, nil
+	}
+	if f.Status != StatusPending {
+		return "", ErrFileNotFound
+	}
+
+	meta, err := s.r2.HeadObject(ctx, cfg.R2Config, f.ObjectKey)
+	if err != nil {
+		if errors.Is(err, errObjectNotFound) {
+			_ = s.store.HardDelete(ctx, nil, app.ID, f.ID)
+			return "", ErrUploadMismatch
+		}
+		return "", ErrUpstream.WithDetails(map[string]any{"reason": err.Error()})
+	}
+	ct := strings.ToLower(strings.TrimSpace(meta.ContentType))
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	if meta.ContentLength != f.SizeBytes || (ct != "" && ct != f.ContentType) {
+		_ = s.r2.DeleteObject(ctx, cfg.R2Config, f.ObjectKey)
+		_ = s.store.HardDelete(ctx, nil, app.ID, f.ID)
+		return "", ErrUploadMismatch
+	}
+
+	now := db.Time(s.now().UTC())
+	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
+		if err := s.store.MarkUploaded(ctx, tx, app.ID, f.ID, now); err != nil {
+			return err
+		}
+		if bind != nil {
+			return bind(ctx, tx, publicURL)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return publicURL, nil
 }
 
 func allowedType(allow []string, ct string) bool {
