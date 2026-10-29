@@ -166,6 +166,16 @@ function shellHTML(parts, apps) {
 /** @type {AbortController|null} */
 let sidebarAbort = null;
 
+const mobileNavMQ = window.matchMedia("(max-width: 800px)");
+
+function teardownChrome() {
+  if (sidebarAbort) {
+    sidebarAbort.abort();
+    sidebarAbort = null;
+  }
+  document.documentElement.classList.remove("nav-lock");
+}
+
 function switchApp(parts, appID) {
   if (!appID) {
     setCurrentAppID("");
@@ -179,7 +189,15 @@ function switchApp(parts, appID) {
   location.hash = hashForApp(appID, section);
 }
 
+function setSidebarInert(sidebar, inert) {
+  if (!sidebar) return;
+  sidebar.inert = inert;
+  if (inert) sidebar.setAttribute("aria-hidden", "true");
+  else sidebar.removeAttribute("aria-hidden");
+}
+
 function wireChrome(layout, parts) {
+  const sidebar = document.getElementById("sidebar");
   const openBtn = document.getElementById("sidebar-open");
   const closeBtn = document.getElementById("sidebar-close");
   const navBackdrop = document.getElementById("sidebar-backdrop");
@@ -187,11 +205,23 @@ function wireChrome(layout, parts) {
   const appSheet = document.getElementById("app-sheet");
   const appSheetBackdrop = document.getElementById("app-sheet-backdrop");
   const appSheetClose = document.getElementById("app-sheet-close");
-  if (!layout || !openBtn || !closeBtn || !navBackdrop || !appSheet || !appSheetBackdrop) return;
+  if (!layout || !sidebar || !openBtn || !closeBtn || !navBackdrop || !appSheet || !appSheetBackdrop) return;
 
   if (sidebarAbort) sidebarAbort.abort();
   sidebarAbort = new AbortController();
   const { signal } = sidebarAbort;
+
+  const syncLock = () => {
+    const locked = layout.classList.contains("layout--nav-open")
+      || layout.classList.contains("layout--app-sheet-open");
+    document.documentElement.classList.toggle("nav-lock", locked);
+  };
+
+  const syncSidebarA11y = () => {
+    // Off-canvas only on mobile; desktop sidebar stays interactive.
+    const hide = mobileNavMQ.matches && !layout.classList.contains("layout--nav-open");
+    setSidebarInert(sidebar, hide);
+  };
 
   const setNavOpen = (open) => {
     layout.classList.toggle("layout--nav-open", open);
@@ -203,10 +233,8 @@ function wireChrome(layout, parts) {
       appSheetBackdrop.hidden = true;
       appChip?.setAttribute("aria-expanded", "false");
     }
-    document.documentElement.classList.toggle(
-      "nav-lock",
-      open || layout.classList.contains("layout--app-sheet-open"),
-    );
+    syncSidebarA11y();
+    syncLock();
   };
 
   const setAppSheetOpen = (open) => {
@@ -219,10 +247,13 @@ function wireChrome(layout, parts) {
       openBtn.setAttribute("aria-expanded", "false");
       navBackdrop.hidden = true;
     }
-    document.documentElement.classList.toggle(
-      "nav-lock",
-      open || layout.classList.contains("layout--nav-open"),
-    );
+    syncSidebarA11y();
+    syncLock();
+  };
+
+  const closeOverlays = () => {
+    setAppSheetOpen(false);
+    setNavOpen(false);
   };
 
   setNavOpen(false);
@@ -243,8 +274,7 @@ function wireChrome(layout, parts) {
   layout.querySelectorAll(".app-picker__item[data-app-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-app-id") || "";
-      setAppSheetOpen(false);
-      setNavOpen(false);
+      closeOverlays();
       switchApp(parts, id);
     }, { signal });
   });
@@ -254,11 +284,23 @@ function wireChrome(layout, parts) {
     if (layout.classList.contains("layout--app-sheet-open")) setAppSheetOpen(false);
     else if (layout.classList.contains("layout--nav-open")) setNavOpen(false);
   }, { signal });
+
+  const onViewportChange = () => {
+    if (!mobileNavMQ.matches) closeOverlays();
+    else syncSidebarA11y();
+  };
+  if (typeof mobileNavMQ.addEventListener === "function") {
+    mobileNavMQ.addEventListener("change", onViewportChange, { signal });
+  } else {
+    // Safari < 14
+    mobileNavMQ.addListener(onViewportChange);
+    signal.addEventListener("abort", () => mobileNavMQ.removeListener(onViewportChange));
+  }
 }
 
 async function renderShell(parts) {
+  teardownChrome();
   const apps = await loadApps();
-  document.documentElement.classList.remove("nav-lock");
   root.innerHTML = `<div class="layout">${shellHTML(parts, apps)}</div>`;
   bannerEl = document.getElementById("banner");
   mainEl = document.getElementById("view");
@@ -266,6 +308,7 @@ async function renderShell(parts) {
   wireChrome(layout, parts);
 
   document.getElementById("logout-btn").addEventListener("click", () => {
+    teardownChrome();
     clearToken();
     clearAppsCache();
     setCurrentAppID("");
@@ -280,6 +323,7 @@ async function renderShell(parts) {
 }
 
 function renderLogin() {
+  teardownChrome();
   root.innerHTML = `
     <div class="login-wrap">
       <article>
@@ -348,6 +392,7 @@ async function route() {
   try {
     await renderShell(parts);
   } catch (e) {
+    teardownChrome();
     root.innerHTML = `<p class="banner" data-tone="err" role="alert">${esc(e.message || String(e))}</p>`;
     return;
   }
