@@ -1,4 +1,5 @@
 import { api, esc, fmtTime, showOk } from "../api.js";
+import { wireMobileSelect } from "../choice-sheet.js";
 import { getAppsCache } from "../context.js";
 
 function appLabel(appID) {
@@ -323,6 +324,8 @@ export async function renderUserDetail(el, appID, userID) {
       await renderUserDetail(el, appID, userID);
     });
   }
+
+  wireMobileSelect(el.querySelector('#adjust select[name="entry_type"]'), { title: "Entry type" });
 
   el.querySelector("#adjust").addEventListener("submit", async (ev) => {
     ev.preventDefault();

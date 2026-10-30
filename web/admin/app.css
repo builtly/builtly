@@ -22,6 +22,7 @@
   --admin-amber: #c45c16;
   --admin-sans: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, sans-serif;
   --admin-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23374151' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 html.nav-lock,
@@ -242,6 +243,10 @@ body > #app {
   margin-bottom: 0.35rem;
 }
 
+.app-switcher {
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23f3f1eb' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+}
+
 .app-switcher select {
   display: block;
   width: 100%;
@@ -250,12 +255,7 @@ body > #app {
   padding: 0.45rem 1.6rem 0.45rem 0.55rem;
   border-radius: 0.1rem;
   border: 1.5px solid var(--admin-sidebar-line);
-  appearance: none;
   background-color: #121722;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23f3f1eb' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.55rem center;
-  background-size: 0.55rem;
   color: #f3f1eb;
   font-family: inherit;
   font-size: 0.88rem;
@@ -3512,12 +3512,6 @@ button[data-danger] {
 .ref-filters__select select,
 .ops-filters__select select {
   display: block;
-  padding-right: 1.75rem;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236b7280' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.65rem center;
-  background-size: 0.55rem;
 }
 
 .act-table-wrap {
@@ -4093,10 +4087,6 @@ button[data-danger] {
   --pico-form-element-background-color: #fff;
   --pico-form-element-focus-color: var(--user-amber);
   --pico-border-radius: 0.1rem;
-}
-
-.user-adjust select {
-  background-image: none;
 }
 
 .user-search .toolbar-fields {
@@ -5031,13 +5021,9 @@ img.user-avatar {
   .field--choice .choice-trigger::after {
     content: "";
     flex: 0 0 auto;
-    width: 0.45rem;
-    height: 0.45rem;
-    margin-top: -0.15rem;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    transform: rotate(45deg);
-    opacity: 0.55;
+    width: 0.55rem;
+    height: 0.35rem;
+    background: center / contain no-repeat var(--select-chevron);
   }
 
   .apps-create .choice-trigger,
@@ -5343,12 +5329,13 @@ img.user-avatar {
   }
 }
 
-/* One chevron for every content select. Component rules often set background:#fff,
-   which drops the native arrow; this image survives that shorthand. */
-.main select:not(.choice-select):not(.prod-price-input__cur) {
+/* Shared chevron. Component rules often set background:#fff, which drops Pico's arrow.
+   Currency stays on its own prefix control inside the price field. */
+select:not(.prod-price-input__cur):not([multiple]):not([size]) {
   appearance: none;
-  padding-right: 1.75rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23374151' d='M1 1l4 4 4-4'/%3E%3C/svg%3E") !important;
+  -webkit-appearance: none;
+  padding-inline-end: 1.75rem;
+  background-image: var(--select-chevron) !important;
   background-repeat: no-repeat !important;
   background-position: right 0.65rem center !important;
   background-size: 0.55rem !important;

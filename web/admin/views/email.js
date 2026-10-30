@@ -113,7 +113,9 @@ export async function renderEmail(el, appID) {
         <p class="hint">${esc(policy)}</p>
       </td>
       <td>
-        <select class="email-trigger" data-trigger="${esc(t.trigger)}">${options}</select>
+        <div class="email-trigger-field">
+          <select class="email-trigger" data-trigger="${esc(t.trigger)}">${options}</select>
+        </div>
         <p class="hint">Injected: ${(t.injected || []).map((k) => `<code>{{{${esc(k)}}}}</code>`).join(" ")}</p>
       </td>
     </tr>`;
@@ -393,6 +395,7 @@ export async function renderEmail(el, appID) {
     });
   });
   el.querySelectorAll(".email-trigger").forEach((sel) => {
+    wireMobileSelect(sel, { title: "Template" });
     sel.dataset.prev = sel.value;
     sel.addEventListener("change", async () => {
       const templateID = sel.value || null;
