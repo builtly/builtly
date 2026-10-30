@@ -292,8 +292,8 @@ Operator flow is **app-first**: create/select an app (sidebar app switcher), the
 | Screen | Functions |
 |---|---|
 | All apps | list, create (then jump to Integrations) |
-| Overview / Integrations / API keys / Products / Users / Activity / Referrals | per selected app; Integrations binds connections + advanced settings JSON. Activity lists app-wide purchases and the credit ledger |
-| Connections | platform credential library by provider group; create/rotate secrets; copy webhook URL; used-by apps |
+| Overview / Integrations / API keys / Products / Email / Users / Activity / Referrals | per selected app; Integrations binds connections + advanced settings JSON. Email holds per-app templates and system-trigger bindings. Activity lists app-wide purchases and the credit ledger |
+| Connections | platform credential library by provider group; create/rotate secrets; copy webhook or redirect URL when the provider has one; Resend test send; used-by apps |
 | Outbox | filter by status, inspect errors, retry dead deliveries |
 | Audit log | filter by app / action |
 
@@ -992,7 +992,10 @@ type Message struct {
 ```
 
 - Client: `POST https://api.resend.com/emails`, `Authorization: Bearer <api_key>`, JSON `{from, to:[…], subject, html, text, reply_to}`; send the outbox row ID as `Idempotency-Key` (⚠ verify current Resend support and key TTL). 429 / 5xx → retryable; 4xx (except 429) → dead with error recorded.
-- Templates: `internal/email/templates/{verify_email,reset_password,email_changed}.{html,txt}.tmpl`, embedded, rendered with `html/template` / `text/template`. Data: app name, action link, expiry, support address. v1 has no per-app template overrides; branding comes from `settings.email`.
+- Built-in templates: `internal/email/templates/{verify_email,reset_password,email_changed}.{html,txt}.tmpl`, embedded. Used when the app has not bound an override. Data: app name, action link, expiry, support address.
+- Per-app templates live in `email_templates` (alias, name, subject, html, variables, published). The admin editor keeps HTML only; a plain-text alternative is derived from that HTML. Placeholders are `{{{UPPER_SNAKE}}}`; HTML values are escaped. `APP_NAME`, `EMAIL`, and `SUPPORT_ADDRESS` are injected and cannot be declared. `ACTION_URL` and `EXPIRY` exist only for security triggers. Sender identity (`from_name`, `from_address`, `reply_to`, `action_base_url`) stays on app settings and is edited on the Email page, not on the template.
+- System bindings (`email_trigger_bindings`): `auth.verify_email`, `auth.reset_password`, and `auth.email_changed` always send — a binding only replaces copy and must include `{{{ACTION_URL}}}`. `auth.welcome` is optional (no row = do not send) and is published on every new registration when bound. No binding means the built-in template.
+- Custom send: `POST /api/v1/email/send` `{template, variables}` with a user JWT and `Idempotency-Key`. Recipient is the signed-in user, never an arbitrary address. Templates bound to a system trigger, or containing `ACTION_URL` / `EXPIRY`, are rejected. Delivery is still an outbox row. Batch send is not implemented.
 - `From` = `"{from_name} <{from_address}>"` from app settings; the address's domain must be verified in the Resend account behind the bound connection (operator's responsibility; failures surface in the outbox view).
 - **Flows**:
   - *Verify*: on register (and on `POST /auth/email/verify/request`, rate-limited 3/h) create `email_tokens(verify_email)`, publish `email.send` with link `{action_base_url}/verify?token=…`. `POST /auth/email/verify {token}` → set `email_verified_at`, consume token.
@@ -1329,9 +1332,14 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 | GET, PUT | `/api/v1/admin/apps/{app_id}/config` | | |
 | GET, POST | `/api/v1/admin/connections` | | |
 | GET, PATCH, DELETE | `/api/v1/admin/connections/{connection_id}` | | |
+| POST | `/api/v1/admin/connections/{connection_id}/test-email` | Resend only | |
 | GET, POST | `/api/v1/admin/apps/{app_id}/api-keys` | | |
 | DELETE | `/api/v1/admin/apps/{app_id}/api-keys/{key_id}` | | |
 | GET, POST | `/api/v1/admin/apps/{app_id}/products` | | |
+| GET, POST | `/api/v1/admin/apps/{app_id}/email-templates` | | |
+| GET, PATCH, DELETE | `/api/v1/admin/apps/{app_id}/email-templates/{template_id}` | | |
+| GET | `/api/v1/admin/apps/{app_id}/email-triggers` | | |
+| PUT | `/api/v1/admin/apps/{app_id}/email-triggers/{trigger}` | | |
 | PATCH | `/api/v1/admin/apps/{app_id}/products/{product_id}` | | |
 | GET | `/api/v1/admin/apps/{app_id}/users` | | |
 | GET, PATCH | `/api/v1/admin/apps/{app_id}/users/{user_id}` | | |
@@ -1347,6 +1355,7 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 | **Auth** | | | 4.3 |
 | POST | `/api/v1/auth/register` · `/login` · `/refresh` · `/logout` | tenant | |
 | POST | `/api/v1/auth/email/verify/request` | user | |
+| POST | `/api/v1/email/send` | user | |
 | POST | `/api/v1/auth/email/verify` · `/password/forgot` · `/password/reset` | tenant | |
 | GET | `/api/v1/auth/oauth/{provider}` | `?app_id` | |
 | GET, POST | `/api/v1/auth/oauth/{provider}/callback` | OAuth state | |
@@ -1587,7 +1596,9 @@ All require `Authorization: Bearer <BUILTLY_ADMIN_TOKEN>`; no `X-App-ID`. Every 
 
 For `stripe`, create/update calls `GET /v1/account` with the key (outside any DB transaction): invalid key → 422 `validation_failed`; `livemode` must match the key type (`sk_live_` / `sk_test_`); an existing connection with the same `account_id` + `livemode` → 409 `connection_duplicate`.
 
-`PATCH /admin/connections/{id}` `{name?, settings?, secrets?}` (secrets merge: omitted = keep, `null` = clear). `DELETE` → 409 `connection_in_use` if bound. `GET /admin/connections?provider=` lists (masked). Env default connections appear read-only with `id: "default"`.
+`PATCH /admin/connections/{id}` `{name?, settings?, secrets?}` (secrets merge: omitted = keep, `null` = clear). `DELETE` → 409 `connection_in_use` if bound. `GET /admin/connections?provider=` lists (masked). Env default connections appear read-only with `id: "default"`. The admin list omits Config when the provider has no settings, and omits Webhook / Redirect unless the provider has one (Stripe, Apple IAP, OAuth).
+
+`POST /admin/connections/{id}/test-email` `{provider: "resend", title, from, to}` sends one message with that connection's API key (including `id: "default"`). `from` / `to` must be email addresses (`Name <addr>` is accepted and reduced to the address). **200** `{id}` is the Resend message id. Invalid fields → 400; Resend 4xx → 422 `email_send_failed` with `details.reason`; Resend 429/5xx → 502 `upstream_error`. The audit row records title and addresses, not the API key.
 
 **API keys**: `POST …/api-keys {name, scopes?}` → **201** `{id, name, prefix, scopes, key: "bk_…", created_at}` (`key` only in this response); `GET` lists without `key`; `DELETE …/{key_id}` → 204 (sets `revoked_at`).
 

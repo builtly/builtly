@@ -134,6 +134,51 @@ func (s *Service) DeleteConnection(ctx context.Context, id string) error {
 	return nil
 }
 
+// OpenConnection decrypts a stored connection, or the env default when id is "default".
+// provider is required for the shared default id, and must match a stored connection when set.
+func (s *Service) OpenConnection(ctx context.Context, id, provider string) (Resolved, error) {
+	if id == "" || id == DefaultConnectionID {
+		if provider == "" || !IsValidProvider(provider) {
+			return Resolved{}, ErrInvalidProvider
+		}
+		if s.env == nil {
+			return Resolved{}, ErrNotConfigured
+		}
+		c, sec, ok := s.env.Get(provider)
+		if !ok {
+			return Resolved{}, ErrNotConfigured
+		}
+		return Resolved{
+			ConnectionID: DefaultConnectionID,
+			Provider:     provider,
+			Source:       "default",
+			Settings:     append([]byte(nil), c.Settings...),
+			Secrets:      append([]byte(nil), sec...),
+		}, nil
+	}
+	c, err := s.store.GetConnection(ctx, nil, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return Resolved{}, ErrConnectionNotFound
+		}
+		return Resolved{}, err
+	}
+	if provider != "" && c.Provider != provider {
+		return Resolved{}, ErrProviderMismatch
+	}
+	plain, err := s.box.Open(c.SecretsEnc, c.KeyVersion, secrets.ConnectionAAD(c.ID, c.Provider))
+	if err != nil {
+		return Resolved{}, err
+	}
+	return Resolved{
+		ConnectionID: c.ID,
+		Provider:     c.Provider,
+		Source:       "connection",
+		Settings:     append([]byte(nil), c.Settings...),
+		Secrets:      plain,
+	}, nil
+}
+
 // GetConnectionPublic returns a masked connection.
 func (s *Service) GetConnectionPublic(ctx context.Context, id string) (PublicConnection, error) {
 	c, err := s.store.GetConnection(ctx, nil, id)

@@ -63,7 +63,16 @@ type Service struct {
 	files      FileMarker
 	avatars    AvatarUploader
 	referrals  ReferralApplier
+	welcome    WelcomeMailer
 }
+
+// WelcomeMailer enqueues an optional post-registration mail inside the caller's transaction.
+type WelcomeMailer interface {
+	PublishWelcomeTx(ctx context.Context, tx *sqlx.Tx, app tenant.App, to string) error
+}
+
+// SetWelcomeMailer attaches the optional welcome-mail publisher.
+func (s *Service) SetWelcomeMailer(m WelcomeMailer) { s.welcome = m }
 
 // NewService constructs an auth Service.
 func NewService(
@@ -177,6 +186,9 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 		if err := s.outbox.PublishTx(ctx, tx, outbox.Event{
 			AppID: &appID, Type: outbox.EventUserRegistered, Payload: payload,
 		}); err != nil {
+			return err
+		}
+		if err := s.publishWelcome(ctx, tx, app, emailAddr); err != nil {
 			return err
 		}
 
@@ -551,6 +563,13 @@ func (s *Service) SetAvatarUploader(u AvatarUploader) { s.avatars = u }
 
 // SetReferrals wires the referral program.
 func (s *Service) SetReferrals(r ReferralApplier) { s.referrals = r }
+
+func (s *Service) publishWelcome(ctx context.Context, tx *sqlx.Tx, app tenant.App, to string) error {
+	if s.welcome == nil || to == "" {
+		return nil
+	}
+	return s.welcome.PublishWelcomeTx(ctx, tx, app, to)
+}
 
 // DeleteMe soft-deletes the account and fans out user.deleted.
 func (s *Service) DeleteMe(ctx context.Context, appID, userID uuid.UUID, password *string, accessIssuedAt time.Time) error {

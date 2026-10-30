@@ -138,6 +138,8 @@ const PROVIDERS = PROVIDER_GROUPS.flatMap((g) => g.providers);
 
 /** OAuth providers register one callback derived from BUILTLY_PUBLIC_URL. */
 const REDIRECT_PROVIDERS = new Set(["google_oauth", "github_oauth", "apple_signin"]);
+/** Providers that receive a per-connection webhook. Others have no URL to copy. */
+const WEBHOOK_PROVIDERS = new Set(["stripe", "apple_iap"]);
 const MISSING_PUBLIC_URL = "Set BUILTLY_PUBLIC_URL to show the OAuth callback URL.";
 
 function copyableURL(url, copied, { missing = "" } = {}) {
@@ -396,12 +398,34 @@ function closeDrawer(el) {
   if (empty) empty.hidden = false;
 }
 
-function openDrawer(el, title, bodyHTML) {
+function testMailForm() {
+  return `<form id="test-mail">
+    <p class="hint">Sends one message with this connection's API key. The sender domain must be verified in Resend.</p>
+    <div class="field">
+      <label for="test-title">Title</label>
+      <input id="test-title" name="title" required maxlength="200" placeholder="Builtly test" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="test-from">Sender</label>
+      <input id="test-from" name="from" type="email" required maxlength="320" placeholder="noreply@example.com" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="test-to">Receiver</label>
+      <input id="test-to" name="to" type="email" required maxlength="320" placeholder="you@example.com" autocomplete="off">
+    </div>
+    <div class="form-actions conn-form-actions">
+      <button type="button" class="secondary cancel-drawer">Cancel</button>
+      <button type="submit">Send test</button>
+    </div>
+  </form>`;
+}
+
+function openDrawer(el, title, bodyHTML, kicker = "Connection") {
   const drawer = el.querySelector("#conn-drawer");
   drawer.innerHTML = `
     <div class="conn-drawer-head">
       <div>
-        <p class="user-kicker">Connection</p>
+        <p class="user-kicker">${esc(kicker)}</p>
         <h3>${esc(title)}</h3>
       </div>
       <button type="button" class="secondary cancel-drawer conn-drawer__close" aria-label="Close">✕</button>
@@ -444,6 +468,8 @@ export async function renderConnections(el) {
   const data = await api("GET", "/connections?provider=" + encodeURIComponent(provider));
   const items = data.items || [];
   const showRedirect = REDIRECT_PROVIDERS.has(provider);
+  const showConfig = schema.settings.length > 0;
+  const showLink = showRedirect || WEBHOOK_PROVIDERS.has(provider);
   const redirectURL = data.redirect_url || "";
   const linkLabel = showRedirect ? "Redirect URL" : "Webhook";
   const copiedLabel = showRedirect ? "Redirect URL" : "Webhook URL";
@@ -452,9 +478,13 @@ export async function renderConnections(el) {
     const usedN = (c.used_by_apps || []).length;
     const used = usedN ? `${usedN} app${usedN === 1 ? "" : "s"}` : "";
     const ro = c.read_only;
+    const testBtn = provider === "resend"
+      ? `<button type="button" class="conn-edit test-mail" data-id="${esc(c.id)}">Test</button>`
+      : "";
     const actions = ro
-      ? `<span class="user-stamp user-stamp--unknown">env</span>`
+      ? `<div class="conn-row-actions">${testBtn}<span class="user-stamp user-stamp--unknown">env</span></div>`
       : `<div class="conn-row-actions">
+          ${testBtn}
           <button type="button" class="conn-edit edit-conn" data-id="${esc(c.id)}">Edit</button>
           <button type="button" class="conn-del del-conn" data-id="${esc(c.id)}">Delete</button>
         </div>`;
@@ -462,6 +492,10 @@ export async function renderConnections(el) {
     const webhook = copyableURL(linkURL, copiedLabel, {
       missing: showRedirect ? MISSING_PUBLIC_URL : "",
     });
+    const configCell = showConfig
+      ? `<td class="conn-config">${esc(primarySetting(provider, c.settings))}</td>`
+      : "";
+    const linkCell = showLink ? `<td class="conn-webhook">${webhook}</td>` : "";
     return `<tr class="conn-row" data-conn-id="${esc(c.id)}" data-reveal="${i}">
       <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
       <td>
@@ -470,13 +504,15 @@ export async function renderConnections(el) {
           <span class="conn-identity__id mono" title="${esc(c.id)}">${esc(shortRef(c.id))}</span>
         </div>
       </td>
-      <td class="conn-config">${esc(primarySetting(provider, c.settings))}</td>
+      ${configCell}
       <td class="conn-secrets mono">${esc(secretsHint(c.secrets))}</td>
-      <td class="conn-webhook">${webhook}</td>
+      ${linkCell}
       <td class="conn-used">${used ? esc(used) : `<span class="user-empty">—</span>`}</td>
       <td class="conn-actions">${actions}</td>
     </tr>`;
   }).join("");
+  const configHead = showConfig ? "<th>Config</th>" : "";
+  const linkHead = showLink ? `<th>${esc(linkLabel)}</th>` : "";
 
   el.querySelector(".conn-panel").innerHTML = `
     <div class="conn-toolbar">
@@ -500,9 +536,9 @@ export async function renderConnections(el) {
               <tr>
                 <th class="user-idx-h"></th>
                 <th>Name</th>
-                <th>Config</th>
+                ${configHead}
                 <th>Secrets</th>
-                <th>${esc(linkLabel)}</th>
+                ${linkHead}
                 <th>Used by</th>
                 <th></th>
               </tr>
@@ -563,6 +599,30 @@ export async function renderConnections(el) {
       await api("DELETE", "/connections/" + encodeURIComponent(btn.dataset.id));
       showOk("Deleted");
       await renderConnections(el);
+    });
+  });
+
+  el.querySelectorAll(".test-mail").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openDrawer(el, "Send test email", testMailForm(), "Resend");
+      el.querySelector("#test-mail").addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        const submit = ev.target.querySelector("button[type=submit]");
+        submit.disabled = true;
+        try {
+          const res = await api("POST", "/connections/" + encodeURIComponent(btn.dataset.id) + "/test-email", {
+            provider,
+            title: String(fd.get("title") || "").trim(),
+            from: String(fd.get("from") || "").trim(),
+            to: String(fd.get("to") || "").trim(),
+          });
+          showOk(res && res.id ? "Test email sent (" + res.id + ")" : "Test email sent");
+          closeDrawer(el);
+        } catch {
+          submit.disabled = false;
+        }
+      });
     });
   });
 

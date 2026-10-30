@@ -247,10 +247,15 @@ body > #app {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 0.45rem 0.55rem;
+  padding: 0.45rem 1.6rem 0.45rem 0.55rem;
   border-radius: 0.1rem;
   border: 1.5px solid var(--admin-sidebar-line);
-  background: #121722;
+  appearance: none;
+  background-color: #121722;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23f3f1eb' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 0.55rem;
   color: #f3f1eb;
   font-family: inherit;
   font-size: 0.88rem;
@@ -803,6 +808,7 @@ input[type="reset"],
   width: 100%;
   color: inherit;
 }
+
 
 .modal::backdrop {
   background: rgba(15, 23, 42, 0.45);
@@ -3181,6 +3187,184 @@ button[data-danger] {
   --pico-color: var(--user-amber);
 }
 
+/* Email — same roster/modal language as products, plus template fields. */
+.email-block {
+  margin: 0 0 1.75rem;
+}
+
+.email-block__head {
+  margin: 0 0 0.75rem;
+}
+
+.email-block__head .user-kicker {
+  margin: 0 0 0.15rem;
+}
+
+.email-block__head h2 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--user-ink);
+  --pico-typography-spacing-top: 0;
+}
+
+.email-templates__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.email-block__head .muted {
+  margin: 0.25rem 0 0;
+}
+
+.email-trigger {
+  display: block;
+  width: min(100%, 22rem);
+  margin: 0;
+  height: 2.5rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background-color: #fff;
+  color: var(--user-ink);
+  font-family: inherit;
+  box-shadow: none;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+}
+
+.email-trigger:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+}
+
+.email-trigger-table .prod-row td {
+  height: auto;
+  vertical-align: top;
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+.email-modal {
+  max-width: min(48rem, calc(100vw - 2rem));
+}
+
+.email-modal .prod-modal__card {
+  max-width: none;
+}
+
+.email-form textarea {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-family: var(--admin-mono, ui-monospace, monospace);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  box-shadow: none;
+  min-height: 7.5rem;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+}
+
+.email-form textarea:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+.email-form .hint {
+  margin: 0.15rem 0 0.55rem;
+}
+
+.email-vars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.65rem;
+}
+
+.email-var {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 8.5rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.email-var .field {
+  margin: 0;
+  min-width: 0;
+}
+
+.email-var-del {
+  align-self: end;
+  height: 2.5rem;
+  margin: 0;
+  padding: 0 0.7rem;
+  border: 1.5px solid var(--user-warn);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-warn);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: none;
+  --pico-background-color: #fff;
+  --pico-border-color: var(--user-warn);
+  --pico-color: var(--user-warn);
+  --pico-border-radius: 0.1rem;
+}
+
+.email-var-del:hover {
+  background: rgba(154, 52, 18, 0.08);
+  --pico-background-color: rgba(154, 52, 18, 0.08);
+}
+
+.email-add-var {
+  margin: 0 0 0.85rem;
+  background: #fff;
+  color: var(--user-ink);
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: none;
+  --pico-background-color: #fff;
+  --pico-border-color: var(--user-ink);
+  --pico-color: var(--user-ink);
+  --pico-border-radius: 0.1rem;
+}
+
+.email-add-var:hover {
+  color: var(--user-amber);
+  border-color: var(--user-amber);
+  --pico-color: var(--user-amber);
+  --pico-border-color: var(--user-amber);
+}
+
+@media (max-width: 700px) {
+  .email-var {
+    grid-template-columns: 1fr;
+  }
+  .email-var-del {
+    justify-self: start;
+  }
+}
+
 /* Activity — purchases + ledger roster */
 .act-tabs {
   display: flex;
@@ -5157,4 +5341,58 @@ img.user-avatar {
   .choice-sheet__panel {
     transition: none;
   }
+}
+
+/* One chevron for every content select. Component rules often set background:#fff,
+   which drops the native arrow; this image survives that shorthand. */
+.main select:not(.choice-select):not(.prod-price-input__cur) {
+  appearance: none;
+  padding-right: 1.75rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23374151' d='M1 1l4 4 4-4'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.65rem center !important;
+  background-size: 0.55rem !important;
+}
+
+.email-preview__meta {
+  margin: 0 0 0.75rem;
+  color: #5c6570;
+  font-size: 0.85rem;
+}
+
+.email-preview__meta strong {
+  color: var(--user-ink);
+  font-weight: 650;
+}
+
+.email-block > .prod-form .form-actions button[type="submit"] {
+  margin: 0;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
+}
+
+.email-preview__host {
+  display: block;
+  min-height: 16rem;
+  max-height: min(28rem, 60vh);
+  overflow: auto;
+  padding: 1rem 1.1rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  color: var(--user-ink);
+  font-size: 0.95rem;
+  line-height: 1.5;
 }

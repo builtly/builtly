@@ -208,6 +208,9 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	registry.SetHandler(outbox.SubAnalytics, analytics.NewSubscriber(analytics.NewClient(hc), resolver).Handle)
 	registry.SetHandler(outbox.SubAffiliate, affiliate.NewSubscriber(affReg, resolver, tSvc).Handle)
 	publisher := outbox.NewPublisher(outboxStore, box, registry)
+	emailStore := email.NewStore(database)
+	emailSvc := email.NewService(database, emailStore, publisher)
+	mailSub.SetCatalog(emailStore)
 	dispatcher := outbox.NewDispatcher(outboxStore, box, registry, uuid.Must(uuid.NewV7()).String(), log)
 	authSvc := auth.NewService(database, userStore, tokens, creditSvc, publisher, cfg.JWTRefreshTTL)
 	authSvc.SetOAuth(auth.OAuthDeps{
@@ -242,8 +245,10 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 		tSvc,
 	)
 	authSvc.SetReferrals(referralSvc)
+	authSvc.SetWelcomeMailer(emailSvc)
 	registry.SetHandler(outbox.SubReferral, referral.NewSubscriber(referralSvc).Handle)
 	adminHandler := admin.NewHandler(database, tSvc, iSvc, resolver, auditStore, tStore, iStore, tMW, userStore, creditSvc, billingStore, outboxStore, box, catalogSvc, stripeClient, referralSvc)
+	adminHandler.SetEmailTemplates(emailSvc)
 
 	srv := server.New(cfg, database, log, server.Deps{
 		Tenant:           tSvc,
@@ -267,6 +272,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 		Storage:          storage.NewHandler(storageSvc),
 		StorageCleaner:   storage.NewCleaner(storageSvc, log),
 		Referral:         referral.NewHandler(referralSvc),
+		Email:            email.NewHandler(emailSvc, userStore),
 	})
 	if err := srv.Run(runCtx); err != nil {
 		log.Error("server stopped with error", "err", err)

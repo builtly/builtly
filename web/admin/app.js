@@ -14,6 +14,7 @@ import { renderAppsList, renderAppDetail, renderAppConfig } from "./views/apps.j
 import { renderConnections } from "./views/connections.js";
 import { renderKeys } from "./views/keys.js";
 import { renderProducts } from "./views/products.js";
+import { renderEmail } from "./views/email.js";
 import { renderUsers, renderUserDetail } from "./views/users.js";
 import { renderReferrals } from "./views/referrals.js";
 import { renderActivity } from "./views/activity.js";
@@ -115,6 +116,7 @@ function shellHTML(parts, apps) {
       ${navLink(hashForApp(current.id, "config"), "Integrations", inApp && section === "config")}
       ${navLink(hashForApp(current.id, "keys"), "API keys", inApp && section === "keys")}
       ${navLink(hashForApp(current.id, "products"), "Products", inApp && section === "products")}
+      ${navLink(hashForApp(current.id, "email"), "Email", inApp && section === "email")}
       ${navLink(hashForApp(current.id, "users"), "Users", inApp && section === "users")}
       ${navLink(hashForApp(current.id, "activity"), "Activity", inApp && section === "activity")}
       ${navLink(hashForApp(current.id, "referrals"), "Referrals", inApp && section === "referrals")}
@@ -426,6 +428,11 @@ async function route() {
       }
       if (section === "products") {
         await renderProducts(view, appID);
+        hydrate(view);
+        return;
+      }
+      if (section === "email") {
+        await renderEmail(view, appID);
         hydrate(view);
         return;
       }

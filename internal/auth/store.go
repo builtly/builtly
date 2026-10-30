@@ -38,6 +38,18 @@ func (s *Store) GetByID(ctx context.Context, q db.Querier, appID, userID uuid.UU
 	return u, nil
 }
 
+// PrimaryEmail is the user's address, or db.ErrNotFound when missing.
+func (s *Store) PrimaryEmail(ctx context.Context, appID, userID uuid.UUID) (string, error) {
+	u, err := s.GetByID(ctx, nil, appID, userID)
+	if err != nil {
+		return "", err
+	}
+	if u.Email == nil || *u.Email == "" {
+		return "", db.ErrNotFound
+	}
+	return *u.Email, nil
+}
+
 // GetByEmail loads a user by (app_id, email).
 func (s *Store) GetByEmail(ctx context.Context, q db.Querier, appID uuid.UUID, email string) (User, error) {
 	var u User

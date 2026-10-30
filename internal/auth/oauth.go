@@ -402,6 +402,9 @@ func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident pro
 		_ = s.outbox.PublishTx(ctx, tx, outbox.Event{
 			AppID: &appID, Type: outbox.EventUserRegistered, Payload: payload,
 		})
+		if err := s.publishWelcome(ctx, tx, app, emailNorm); err != nil {
+			return err
+		}
 		if referralCode != nil && *referralCode != "" && s.referrals != nil {
 			_, _ = s.referrals.ApplyTx(ctx, tx, app, uid, *referralCode)
 		}

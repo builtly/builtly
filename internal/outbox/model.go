@@ -56,6 +56,7 @@ type Row struct {
 
 // Event is published by producers inside a transaction.
 type Event struct {
+	ID      uuid.UUID // optional; used only when the event fans out to one subscriber
 	AppID   *uuid.UUID
 	Type    string
 	Payload json.RawMessage

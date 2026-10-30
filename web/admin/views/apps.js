@@ -350,16 +350,19 @@ export async function renderAppConfig(el, appID) {
     <form id="put-config" class="ig-form">
       ${groupsHTML}
 
+      <div class="form-actions ig-actions">
+        <button type="submit" id="save-integrations">Save integrations</button>
+      </div>
+
       <details class="ig-advanced">
         <summary>Advanced app settings (JSON)</summary>
         <div class="field">
-          <textarea name="settings" rows="12" spellcheck="false">${esc(settingsJSON)}</textarea>
+          <textarea id="app-settings-json" name="settings" rows="12" spellcheck="false">${esc(settingsJSON)}</textarea>
+        </div>
+        <div class="form-actions ig-actions">
+          <button type="button" id="save-settings">Save settings only</button>
         </div>
       </details>
-
-      <div class="form-actions ig-actions">
-        <button type="submit">Save integrations</button>
-      </div>
     </form>`;
 
   applyRevealDelays(el, ".ig-bind[data-reveal]");
@@ -369,15 +372,17 @@ export async function renderAppConfig(el, appID) {
     wireMobileSelect(sel, { title });
   });
 
-  el.querySelector("#put-config").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const fd = new FormData(ev.target);
-    let settings;
+  const readSettings = () => {
     try {
-      settings = JSON.parse(String(fd.get("settings") || "{}"));
+      return JSON.parse(String(el.querySelector("#app-settings-json")?.value || "{}"));
     } catch {
       throw new Error("settings must be valid JSON");
     }
+  };
+
+  const readIntegrations = () => {
+    const form = el.querySelector("#put-config");
+    const fd = new FormData(form);
     const integrations = {};
     for (const p of PROVIDERS) {
       const cid = String(fd.get("conn_" + p) || "");
@@ -393,8 +398,23 @@ export async function renderAppConfig(el, appID) {
       }
       integrations[p] = entry;
     }
+    return integrations;
+  };
+
+  el.querySelector("#put-config").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const settings = readSettings();
+    const integrations = readIntegrations();
     await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings, integrations });
     showOk("Integrations saved");
+    await renderAppConfig(el, appID);
+  });
+
+  el.querySelector("#save-settings").addEventListener("click", async () => {
+    const settings = readSettings();
+    // Omit integrations so existing bindings are preserved.
+    await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings });
+    showOk("Settings saved");
     await renderAppConfig(el, appID);
   });
 }

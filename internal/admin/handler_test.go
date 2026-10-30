@@ -100,6 +100,14 @@ func TestAdminRoutesRequireAuth(t *testing.T) {
 		{"GET", "/api/v1/admin/connections/00000000-0000-7000-8000-000000000003"},
 		{"PATCH", "/api/v1/admin/connections/00000000-0000-7000-8000-000000000003"},
 		{"DELETE", "/api/v1/admin/connections/00000000-0000-7000-8000-000000000003"},
+		{"POST", "/api/v1/admin/connections/00000000-0000-7000-8000-000000000003/test-email"},
+		{"GET", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-templates"},
+		{"POST", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-templates"},
+		{"GET", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-templates/00000000-0000-7000-8000-000000000005"},
+		{"PATCH", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-templates/00000000-0000-7000-8000-000000000005"},
+		{"DELETE", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-templates/00000000-0000-7000-8000-000000000005"},
+		{"GET", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-triggers"},
+		{"PUT", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/email-triggers/auth.verify_email"},
 		{"GET", "/api/v1/admin/audit-log"},
 		{"GET", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/users"},
 		{"GET", "/api/v1/admin/apps/00000000-0000-7000-8000-000000000001/users/00000000-0000-7000-8000-000000000002"},
@@ -208,5 +216,98 @@ func TestAdminAppFlowAndSecretRedaction(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "[redacted]") {
 		t.Fatalf("expected redacted secrets in audit: %s", rr.Body.String())
+	}
+}
+
+func TestPutConfigOmitsIntegrationsPreservesBindings(t *testing.T) {
+	srv, _, _ := testServer(t)
+	do := func(method, path string, body any) *httptest.ResponseRecorder {
+		t.Helper()
+		var rdr io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			rdr = bytes.NewReader(b)
+		}
+		req := httptest.NewRequest(method, path, rdr)
+		req.Header.Set("Authorization", "Bearer "+adminToken)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rr := httptest.NewRecorder()
+		srv.Router().ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := do("POST", "/api/v1/admin/apps", map[string]any{"slug": "bind-keep", "name": "Bind Keep"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create app: %d %s", rr.Code, rr.Body.String())
+	}
+	var app map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &app)
+	appID := app["id"].(string)
+
+	rr = do("POST", "/api/v1/admin/connections", map[string]any{
+		"provider": "resend", "name": "Mail",
+		"settings": map[string]any{},
+		"secrets":  map[string]any{"api_key": "re_keep_binding_secret_value"},
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create conn: %d %s", rr.Code, rr.Body.String())
+	}
+	var conn map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &conn)
+	connID := conn["id"].(string)
+
+	rr = do("PUT", "/api/v1/admin/apps/"+appID+"/config", map[string]any{
+		"settings": map[string]any{"allowed_origins": []string{"https://a.example"}},
+		"integrations": map[string]any{
+			"resend": map[string]any{"connection_id": connID},
+		},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bind: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Settings-only update must not clear bindings.
+	rr = do("PUT", "/api/v1/admin/apps/"+appID+"/config", map[string]any{
+		"settings": map[string]any{
+			"allowed_origins": []string{"https://b.example"},
+			"auth":            map[string]any{"providers": []string{"google"}},
+		},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("settings only: %d %s", rr.Code, rr.Body.String())
+	}
+
+	rr = do("GET", "/api/v1/admin/apps/"+appID+"/config", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get config: %d %s", rr.Code, rr.Body.String())
+	}
+	var cfg map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &cfg)
+	integ := cfg["integrations"].(map[string]any)
+	resend := integ["resend"].(map[string]any)
+	if resend["connection_id"] != connID {
+		t.Fatalf("resend binding lost after settings-only PUT: %#v", resend)
+	}
+	settings := cfg["settings"].(map[string]any)
+	origins := settings["allowed_origins"].([]any)
+	if len(origins) != 1 || origins[0] != "https://b.example" {
+		t.Fatalf("settings not updated: %#v", settings["allowed_origins"])
+	}
+
+	// Explicit empty integrations still clears bindings.
+	rr = do("PUT", "/api/v1/admin/apps/"+appID+"/config", map[string]any{
+		"settings":     map[string]any{"allowed_origins": []string{"https://b.example"}},
+		"integrations": map[string]any{},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear bindings: %d %s", rr.Code, rr.Body.String())
+	}
+	rr = do("GET", "/api/v1/admin/apps/"+appID+"/config", nil)
+	_ = json.Unmarshal(rr.Body.Bytes(), &cfg)
+	resend = cfg["integrations"].(map[string]any)["resend"].(map[string]any)
+	if resend["source"] == "binding" || resend["connection_id"] == connID {
+		t.Fatalf("expected DB binding cleared, got %#v", resend)
 	}
 }

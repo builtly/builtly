@@ -21,6 +21,7 @@ import (
 	"github.com/builtly/builtly/internal/catalog"
 	"github.com/builtly/builtly/internal/config"
 	"github.com/builtly/builtly/internal/credit"
+	"github.com/builtly/builtly/internal/email"
 	"github.com/builtly/builtly/internal/integration"
 	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/db"
@@ -57,6 +58,7 @@ type Deps struct {
 	Storage          *storage.Handler
 	StorageCleaner   *storage.Cleaner
 	Referral         *referral.Handler
+	Email            *email.Handler
 }
 
 // Server owns the HTTP listener and shared dependencies.
@@ -203,6 +205,9 @@ func (s *Server) buildRouter() chi.Router {
 							user.Get("/user/referral", s.deps.Referral.Get)
 							user.Get("/user/referral/referees", s.deps.Referral.ListReferees)
 							user.Post("/user/referral/apply", s.deps.Referral.Apply)
+						}
+						if s.deps.Email != nil {
+							user.Post("/email/send", s.deps.Email.Send)
 						}
 					})
 				})

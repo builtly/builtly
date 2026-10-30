@@ -34,7 +34,10 @@ func (p *Publisher) PublishTx(ctx context.Context, tx *sqlx.Tx, ev Event) error 
 	}
 	now := db.Now()
 	for _, sub := range subs {
-		id := uuid.Must(uuid.NewV7())
+		id := ev.ID
+		if id == uuid.Nil || len(subs) != 1 {
+			id = uuid.Must(uuid.NewV7())
+		}
 		aad := []byte(id.String() + sub)
 		enc, err := p.box.SealEmbedded([]byte(ev.Payload), aad)
 		if err != nil {

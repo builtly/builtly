@@ -16,6 +16,7 @@ import (
 	"github.com/builtly/builtly/internal/billing/stripeapi"
 	"github.com/builtly/builtly/internal/catalog"
 	"github.com/builtly/builtly/internal/credit"
+	"github.com/builtly/builtly/internal/email"
 	"github.com/builtly/builtly/internal/integration"
 	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/db"
@@ -43,7 +44,12 @@ type Handler struct {
 	catalog   *catalog.Service
 	stripe    *stripeapi.Client
 	referrals *referral.Service
+	mail      email.Sender // nil → Resend; tests inject a sender
+	emails    *email.Service
 }
+
+// SetEmailTemplates wires per-app template management.
+func (h *Handler) SetEmailTemplates(svc *email.Service) { h.emails = svc }
 
 // NewHandler constructs an admin Handler.
 func NewHandler(
@@ -107,6 +113,15 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/connections/{connection_id}", h.getConnection)
 	r.Patch("/connections/{connection_id}", h.patchConnection)
 	r.Delete("/connections/{connection_id}", h.deleteConnection)
+	r.Post("/connections/{connection_id}/test-email", h.testConnectionEmail)
+
+	r.Get("/apps/{app_id}/email-templates", h.listEmailTemplates)
+	r.Post("/apps/{app_id}/email-templates", h.createEmailTemplate)
+	r.Get("/apps/{app_id}/email-templates/{template_id}", h.getEmailTemplate)
+	r.Patch("/apps/{app_id}/email-templates/{template_id}", h.patchEmailTemplate)
+	r.Delete("/apps/{app_id}/email-templates/{template_id}", h.deleteEmailTemplate)
+	r.Get("/apps/{app_id}/email-triggers", h.listEmailTriggers)
+	r.Put("/apps/{app_id}/email-triggers/{trigger}", h.putEmailTrigger)
 
 	r.Get("/outbox", h.listOutbox)
 	r.Post("/outbox/{id}/retry", h.retryOutbox)
@@ -215,15 +230,12 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Settings     tenant.Settings                     `json:"settings"`
-		Integrations map[string]integration.BindingInput `json:"integrations"`
+		Settings     tenant.Settings                      `json:"settings"`
+		Integrations *map[string]integration.BindingInput `json:"integrations"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
-	}
-	if body.Integrations == nil {
-		body.Integrations = map[string]integration.BindingInput{}
 	}
 	settings, err := tenant.MergeSettings(tenant.DefaultSettings(), body.Settings)
 	if err != nil {
@@ -249,18 +261,22 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		_ = app
-		// Replace bindings inside this tx.
-		if err := h.iStore.DeleteBindingsForApp(r.Context(), tx, id); err != nil {
-			return err
-		}
-		for provider, in := range body.Integrations {
-			if err := h.upsertBindingTx(r, tx, id, provider, in, now); err != nil {
+		// Omit integrations → leave bindings alone. Present map (even {}) replaces all.
+		if body.Integrations != nil {
+			if err := h.iStore.DeleteBindingsForApp(r.Context(), tx, id); err != nil {
 				return err
 			}
+			for provider, in := range *body.Integrations {
+				if err := h.upsertBindingTx(r, tx, id, provider, in, now); err != nil {
+					return err
+				}
+			}
 		}
-		return h.writeAuditTx(r, tx, &id, "app.config.update", "app", id.String(), map[string]any{
-			"settings": body.Settings, "integrations": body.Integrations,
-		})
+		diff := map[string]any{"settings": body.Settings}
+		if body.Integrations != nil {
+			diff["integrations"] = *body.Integrations
+		}
+		return h.writeAuditTx(r, tx, &id, "app.config.update", "app", id.String(), diff)
 	})
 	if err != nil {
 		httpx.WriteError(w, r, err)
