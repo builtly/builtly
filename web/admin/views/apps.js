@@ -5,6 +5,7 @@ import { clearAppsCache, setCurrentAppID } from "../context.js";
 const PROVIDER_GROUPS = [
   { id: "auth", label: "Auth", providers: ["google_oauth", "github_oauth", "apple_signin"] },
   { id: "payments", label: "Payments", providers: ["stripe", "apple_iap", "google_play"] },
+  { id: "ai", label: "AI Gateway", providers: ["openai_compatible"] },
   { id: "email", label: "Email", providers: ["resend"] },
   { id: "storage", label: "Storage", providers: ["r2"] },
   { id: "analytics", label: "Analytics", providers: ["posthog"] },
@@ -14,6 +15,7 @@ const PROVIDER_GROUPS = [
 const PROVIDERS = PROVIDER_GROUPS.flatMap((g) => g.providers);
 
 const PROVIDER_LABELS = {
+  openai_compatible: "OpenAI Compatible",
   stripe: "Stripe",
   resend: "Resend",
   r2: "Cloudflare R2",

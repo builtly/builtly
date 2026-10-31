@@ -147,12 +147,12 @@ export async function renderEmail(el, appID) {
       </div>
     </div>
 
-    <section class="email-block">
-      <div class="email-block__head">
-        <p class="user-kicker">Identity</p>
+    <article class="apps-create email-card">
+      <div class="apps-create__head">
         <h2>Sender</h2>
-        <p class="muted">Not tied to a template. The domain must be verified on the Resend account bound to this app. Empty from address means mail is skipped.</p>
+        <span class="apps-create__badge">identity</span>
       </div>
+      <p class="muted email-card__sub">Not tied to a template. The domain must be verified on the Resend account bound to this app. Empty from address means mail is skipped.</p>
       <form id="email-sender" class="prod-form">
         <div class="form-row">
           <div class="field"><label>From name</label><input name="from_name" maxlength="80" value="${esc(sender.from_name || "")}" placeholder="${esc(app.name || "Acme")}" autocomplete="off"></div>
@@ -167,14 +167,14 @@ export async function renderEmail(el, appID) {
           <button type="submit">Save sender</button>
         </div>
       </form>
-    </section>
+    </article>
 
-    <section class="email-block">
-      <div class="email-block__head">
-        <p class="user-kicker">System</p>
+    <article class="apps-create email-card">
+      <div class="apps-create__head">
         <h2>Triggers</h2>
-        <p class="muted">Security mail always sends. Built-in means the embedded copy. Welcome stays off until a published template is selected.</p>
+        <span class="apps-create__badge">system</span>
       </div>
+      <p class="muted email-card__sub">Security mail always sends. Built-in means the embedded copy. Welcome stays off until a published template is selected.</p>
       <div class="table-wrap apps-table-wrap prod-table-wrap">
         <table class="apps-table prod-table email-trigger-table">
           <thead><tr>
@@ -185,7 +185,7 @@ export async function renderEmail(el, appID) {
           <tbody>${triggerRows}</tbody>
         </table>
       </div>
-    </section>
+    </article>
 
     <section class="email-block">
       <div class="email-block__head">

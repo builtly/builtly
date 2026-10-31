@@ -70,13 +70,17 @@ func testServer(t *testing.T) (*server.Server, *config.Config, *db.DB) {
 	h := admin.NewHandler(database, tSvc, iSvc, resolver, audit, tStore, iStore, tMW, userStore, creditSvc, billing.NewStore(database), outboxStore, box, nil, nil, nil)
 	log := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 	slog.SetDefault(log)
+	aiStore := ai.NewStore(database)
+	aiSvc := ai.NewService(database, aiStore, creditSvc, resolver, nil)
+	aiHandler := ai.NewHandler(creditSvc, userStore)
+	aiHandler.SetService(aiSvc)
 	srv := server.New(cfg, database, log, server.Deps{
 		Tenant: tSvc, TenantMW: tMW, TenantStore: tStore,
 		Integration: iSvc, IntegStore: iStore, Resolver: resolver,
 		Secrets: box, AdminAuth: adminAuth, Admin: h,
 		AuthMW: authMW, Credits: creditSvc,
 		CreditUser: credit.NewUserHandler(creditSvc),
-		AI:         ai.NewHandler(creditSvc, userStore),
+		AI:         aiHandler,
 	})
 	return srv, cfg, database
 }

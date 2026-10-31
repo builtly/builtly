@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/builtly/builtly/internal/ai"
 	"github.com/builtly/builtly/internal/apperr"
 	"github.com/builtly/builtly/internal/auth"
 	"github.com/builtly/builtly/internal/billing"
@@ -44,11 +45,15 @@ type Handler struct {
 	box            *secrets.Box
 	catalog        *catalog.Service
 	stripe         *stripeapi.Client
+	aiHandler      *ai.Handler
 	referrals      *referral.Service
 	mail           email.Sender // nil → Resend; tests inject a sender
 	emails         *email.Service
 	trustedProxies []*net.IPNet
 }
+
+// SetAIHandler wires AI preset endpoints.
+func (h *Handler) SetAIHandler(a *ai.Handler) { h.aiHandler = a }
 
 // SetEmailTemplates wires per-app template management.
 func (h *Handler) SetEmailTemplates(svc *email.Service) { h.emails = svc }
@@ -119,6 +124,12 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Patch("/connections/{connection_id}", h.patchConnection)
 	r.Delete("/connections/{connection_id}", h.deleteConnection)
 	r.Post("/connections/{connection_id}/test-email", h.testConnectionEmail)
+	r.Post("/connections/{connection_id}/test-llm", h.testConnectionLLM)
+
+	r.Get("/apps/{app_id}/ai-presets", h.listAIPresets)
+	r.Post("/apps/{app_id}/ai-presets", h.createAIPreset)
+	r.Patch("/apps/{app_id}/ai-presets/{id}", h.patchAIPreset)
+	r.Delete("/apps/{app_id}/ai-presets/{id}", h.deleteAIPreset)
 
 	r.Get("/apps/{app_id}/email-templates", h.listEmailTemplates)
 	r.Post("/apps/{app_id}/email-templates", h.createEmailTemplate)
@@ -373,7 +384,7 @@ func (h *Handler) loadConfig(r *http.Request, appID uuid.UUID) (map[string]any, 
 		integration.ProviderStripe, integration.ProviderResend, integration.ProviderR2,
 		integration.ProviderGoogleOAuth, integration.ProviderGitHubOAuth, integration.ProviderAppleSignIn,
 		integration.ProviderAppleIAP, integration.ProviderGooglePlay, integration.ProviderPostHog,
-		integration.ProviderPromoteKit, integration.ProviderAffonso,
+		integration.ProviderPromoteKit, integration.ProviderAffonso, integration.ProviderOpenAI,
 	}
 	for _, p := range providers {
 		if _, ok := bound[p]; ok {
@@ -542,6 +553,46 @@ func (h *Handler) deleteConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.writeAudit(r, nil, "connection.delete", "connection", id, map[string]any{})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) testConnectionLLM(w http.ResponseWriter, r *http.Request) {
+	if h.aiHandler != nil {
+		h.aiHandler.TestAdminLLM(w, r)
+		return
+	}
+	httpx.WriteError(w, r, apperr.Internal)
+}
+
+func (h *Handler) listAIPresets(w http.ResponseWriter, r *http.Request) {
+	if h.aiHandler != nil {
+		h.aiHandler.ListAdminPresets(w, r)
+		return
+	}
+	httpx.WriteError(w, r, apperr.Internal)
+}
+
+func (h *Handler) createAIPreset(w http.ResponseWriter, r *http.Request) {
+	if h.aiHandler != nil {
+		h.aiHandler.CreateAdminPreset(w, r)
+		return
+	}
+	httpx.WriteError(w, r, apperr.Internal)
+}
+
+func (h *Handler) patchAIPreset(w http.ResponseWriter, r *http.Request) {
+	if h.aiHandler != nil {
+		h.aiHandler.PatchAdminPreset(w, r)
+		return
+	}
+	httpx.WriteError(w, r, apperr.Internal)
+}
+
+func (h *Handler) deleteAIPreset(w http.ResponseWriter, r *http.Request) {
+	if h.aiHandler != nil {
+		h.aiHandler.DeleteAdminPreset(w, r)
+		return
+	}
+	httpx.WriteError(w, r, apperr.Internal)
 }
 
 func (h *Handler) listAPIKeys(w http.ResponseWriter, r *http.Request) {

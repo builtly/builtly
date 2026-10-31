@@ -98,6 +98,12 @@ func BuildEnvDefaults(cfg *config.Config) *EnvDefaults {
 	if d.Affonso != nil {
 		add(ProviderAffonso, "env default affonso", map[string]any{}, APIKeySecrets{APIKey: d.Affonso.APIKey})
 	}
+	if d.OpenAI != nil {
+		add(ProviderOpenAI, "env default openai_compatible", map[string]any{
+			"base_url":      d.OpenAI.BaseURL,
+			"default_model": d.OpenAI.DefaultModel,
+		}, APIKeySecrets{APIKey: d.OpenAI.APIKey})
+	}
 	return e
 }
 

@@ -13,6 +13,7 @@ const (
 	ProviderPostHog     = "posthog"
 	ProviderPromoteKit  = "promotekit"
 	ProviderAffonso     = "affonso"
+	ProviderOpenAI      = "openai_compatible"
 )
 
 // DefaultConnectionID is the synthetic id for env-defined credentials.
@@ -30,7 +31,7 @@ func IsValidProvider(p string) bool {
 	switch p {
 	case ProviderStripe, ProviderResend, ProviderR2, ProviderGoogleOAuth, ProviderGitHubOAuth,
 		ProviderAppleSignIn, ProviderAppleIAP, ProviderGooglePlay, ProviderPostHog,
-		ProviderPromoteKit, ProviderAffonso:
+		ProviderPromoteKit, ProviderAffonso, ProviderOpenAI:
 		return true
 	default:
 		return false

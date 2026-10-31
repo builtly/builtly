@@ -244,6 +244,7 @@ func (s *Store) SumLedger(ctx context.Context, q db.Querier, appID, userID uuid.
 }
 
 // LatestBalanceAfter returns the newest balance_after or ok=false.
+// Uses ID DESC as secondary tie-breaker in case multiple entries share the exact same microsecond timestamp.
 func (s *Store) LatestBalanceAfter(ctx context.Context, q db.Querier, appID, userID uuid.UUID) (int64, bool, error) {
 	var bal int64
 	err := s.q(q).GetContext(ctx, &bal, s.db.Rebind(`

@@ -123,11 +123,23 @@ const SCHEMAS = {
       { key: "api_key", label: "API key", type: "password", required: true },
     ],
   },
+  openai_compatible: {
+    label: "OpenAI Compatible",
+    settings: [
+      { key: "base_url", label: "Base URL", type: "text", required: true, placeholder: "https://api.openai.com/v1" },
+      { key: "default_model", label: "Default model", type: "text", placeholder: "gpt-4o-mini" },
+      { key: "allowed_models", label: "Allowed models", type: "lines", placeholder: "gpt-4o-mini\ngpt-4o" },
+    ],
+    secrets: [
+      { key: "api_key", label: "API key", type: "password", required: true, placeholder: "sk-…" },
+    ],
+  },
 };
 
 const PROVIDER_GROUPS = [
   { id: "auth", label: "Auth", providers: ["google_oauth", "github_oauth", "apple_signin"] },
   { id: "payments", label: "Payments", providers: ["stripe", "apple_iap", "google_play"] },
+  { id: "ai", label: "AI Gateway", providers: ["openai_compatible"] },
   { id: "email", label: "Email", providers: ["resend"] },
   { id: "storage", label: "Storage", providers: ["r2"] },
   { id: "analytics", label: "Analytics", providers: ["posthog"] },
@@ -288,6 +300,8 @@ function primarySetting(provider, settings) {
       return s.package_name || "—";
     case "posthog":
       return s.host || "—";
+    case "openai_compatible":
+      return s.base_url || "https://api.openai.com/v1";
     default:
       return "—";
   }
@@ -486,7 +500,9 @@ export async function renderConnections(el) {
     const ro = c.read_only;
     const testBtn = provider === "resend"
       ? `<button type="button" class="conn-edit test-mail" data-id="${esc(c.id)}">Test</button>`
-      : "";
+      : (provider === "openai_compatible"
+        ? `<button type="button" class="conn-edit test-llm" data-id="${esc(c.id)}">Test</button>`
+        : "");
     const actions = ro
       ? `<div class="conn-row-actions">${testBtn}<span class="user-stamp user-stamp--unknown">env</span></div>`
       : `<div class="conn-row-actions">
@@ -517,7 +533,9 @@ export async function renderConnections(el) {
       <td class="conn-actions">${actions}</td>
     </tr>`;
   }).join("");
-  const configHead = showConfig ? "<th>Config</th>" : "";
+  const configHead = showConfig
+    ? `<th>${provider === "openai_compatible" ? "Base URL" : "Config"}</th>`
+    : "";
   const linkHead = showLink ? `<th>${esc(linkLabel)}</th>` : "";
 
   el.querySelector(".conn-panel").innerHTML = `
@@ -630,6 +648,20 @@ export async function renderConnections(el) {
           submit.disabled = false;
         }
       });
+    });
+  });
+
+  el.querySelectorAll(".test-llm").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        const res = await api("POST", "/connections/" + encodeURIComponent(btn.dataset.id) + "/test-llm");
+        showOk("LLM connection OK (" + (res?.status || "reachable") + ")");
+      } catch (err) {
+        // error already toasted
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
 

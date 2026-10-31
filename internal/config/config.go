@@ -73,6 +73,13 @@ type DefaultConnections struct {
 	PostHog     *PostHogDefault
 	PromoteKit  *APIKeyDefault
 	Affonso     *APIKeyDefault
+	OpenAI      *OpenAIDefault
+}
+
+type OpenAIDefault struct {
+	BaseURL      string
+	APIKey       string
+	DefaultModel string
 }
 
 type StripeDefault struct {
@@ -397,6 +404,18 @@ func (c *Config) loadDefaultConnections() error {
 	}
 	c.DefaultConnections.Affonso, err = loadGroup("affonso", []string{"BUILTLY_AFFONSO_API_KEY"}, func() (*APIKeyDefault, error) {
 		return &APIKeyDefault{APIKey: os.Getenv("BUILTLY_AFFONSO_API_KEY")}, nil
+	})
+	if err != nil {
+		return err
+	}
+	c.DefaultConnections.OpenAI, err = loadGroup("openai_compatible", []string{"BUILTLY_LLM_API_KEY"}, func() (*OpenAIDefault, error) {
+		baseURL := getenv("BUILTLY_LLM_BASE_URL", "https://api.openai.com/v1")
+		defaultModel := getenv("BUILTLY_LLM_DEFAULT_MODEL", "gpt-4o-mini")
+		return &OpenAIDefault{
+			BaseURL:      baseURL,
+			APIKey:       os.Getenv("BUILTLY_LLM_API_KEY"),
+			DefaultModel: defaultModel,
+		}, nil
 	})
 	return err
 }

@@ -184,7 +184,11 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	creditSvc := credit.NewService(database, creditStore)
 	tokens := auth.NewTokenService(cfg.JWTSigningKeys, cfg.JWTAccessTTL)
 	authMW := auth.NewMiddleware(tokens, tSvc)
+	hc := &http.Client{Timeout: 10 * time.Second}
+	aiStore := ai.NewStore(database)
+	aiSvc := ai.NewService(database, aiStore, creditSvc, resolver, hc)
 	aiHandler := ai.NewHandler(creditSvc, userStore)
+	aiHandler.SetService(aiSvc)
 	creditUser := credit.NewUserHandler(creditSvc)
 	auditStore := admin.NewAuditStore(database)
 	adminAuth := admin.NewAuth(cfg)
@@ -199,7 +203,6 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	}
 	mailSub := email.NewSubscriber(email.NewResendClient(nil), templates, resolver, tSvc)
 	registry.SetHandler(outbox.SubEmail, mailSub.Handle)
-	hc := &http.Client{Timeout: 10 * time.Second}
 	jwksCache := jwks.New(hc)
 	provReg := provider.NewRegistry(hc, jwksCache)
 	registry.SetHandler(outbox.SubAppleRevoke, auth.NewAppleRevokeSubscriber(provReg, resolver, log).Handle)
@@ -249,6 +252,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	registry.SetHandler(outbox.SubReferral, referral.NewSubscriber(referralSvc).Handle)
 	adminHandler := admin.NewHandler(database, tSvc, iSvc, resolver, auditStore, tStore, iStore, tMW, userStore, creditSvc, billingStore, outboxStore, box, catalogSvc, stripeClient, referralSvc)
 	adminHandler.SetEmailTemplates(emailSvc)
+	adminHandler.SetAIHandler(aiHandler)
 	adminHandler.SetTrustedProxies(cfg.TrustedProxies)
 
 	cleaner := storage.NewCleaner(storageSvc, log)

@@ -39,6 +39,10 @@ type PostHogSecrets struct {
 	ProjectAPIKey string `json:"project_api_key"`
 }
 
+type OpenAISecrets struct {
+	APIKey string `json:"api_key"`
+}
+
 // MaskSecretsJSON returns a JSON object with secret values masked for API responses.
 func MaskSecretsJSON(provider string, plain []byte) (json.RawMessage, error) {
 	if len(plain) == 0 {
@@ -54,7 +58,7 @@ func MaskSecretsJSON(provider string, plain []byte) (json.RawMessage, error) {
 			"secret_key":      secrets.MaskSecret(s.SecretKey),
 			"webhook_secrets": secrets.MaskSecretList(s.WebhookSecrets),
 		})
-	case ProviderResend, ProviderPromoteKit, ProviderAffonso:
+	case ProviderResend, ProviderPromoteKit, ProviderAffonso, ProviderOpenAI:
 		var s APIKeySecrets
 		if err := json.Unmarshal(plain, &s); err != nil {
 			return nil, err
@@ -112,7 +116,7 @@ func ValidateSecretsJSON(provider string, plain []byte) error {
 		if s.SecretKey == "" || len(s.WebhookSecrets) == 0 {
 			return fmt.Errorf("stripe requires secret_key and webhook_secrets")
 		}
-	case ProviderResend, ProviderPromoteKit, ProviderAffonso:
+	case ProviderResend, ProviderPromoteKit, ProviderAffonso, ProviderOpenAI:
 		var s APIKeySecrets
 		if err := json.Unmarshal(plain, &s); err != nil {
 			return err

@@ -16,6 +16,7 @@ var tenantTables = []string{
 	"products", "purchases", "credit_balances", "credit_ledger",
 	"referrals", "files", "app_api_keys",
 	"email_templates", "email_trigger_bindings", "email_sends",
+	"ai_presets",
 }
 
 // TestTenantSQLLint scans internal/*/store.go SQL string constants and fails if a

@@ -147,6 +147,18 @@ func TestResolverPrecedence(t *testing.T) {
 		}
 	})
 
+	t.Run("create openai_compatible connection", func(t *testing.T) {
+		pc, err := iSvc.CreateConnection(ctx, integration.ProviderOpenAI, "DeepSeek Gateway",
+			json.RawMessage(`{"base_url":"https://api.deepseek.com","default_model":"deepseek-chat"}`),
+			mustJSON(t, integration.APIKeySecrets{APIKey: "sk-deepseek-test-key-1234"}))
+		if err != nil {
+			t.Fatalf("failed to create openai_compatible connection: %v", err)
+		}
+		if pc.Provider != integration.ProviderOpenAI {
+			t.Fatalf("expected provider %s, got %s", integration.ProviderOpenAI, pc.Provider)
+		}
+	})
+
 }
 
 func mustJSON(t *testing.T, v any) json.RawMessage {

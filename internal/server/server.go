@@ -175,7 +175,11 @@ func (s *Server) buildRouter() chi.Router {
 
 				pub.Group(func(authed chi.Router) {
 					authed.Use(s.deps.AuthMW.Authenticate)
-					authed.Post("/ai/consume", s.deps.AI.Consume)
+					if s.deps.AI != nil {
+						authed.Post("/ai/consume", s.deps.AI.Consume)
+						authed.Post("/ai/chat/completions", s.deps.AI.ChatCompletions)
+						authed.Post("/ai/presets/{slug}/run", s.deps.AI.RunPreset)
+					}
 					if s.deps.Auth != nil {
 						authed.Post("/auth/email/verify/request", s.deps.Auth.RequestVerify)
 					}

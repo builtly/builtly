@@ -144,9 +144,9 @@ export async function renderUsers(el, appID) {
     </div>
     <form id="search" class="toolbar user-search">
       <label class="user-search__label" for="user-q">Find</label>
-      <div class="toolbar-fields">
+      <div class="toolbar-fields user-search__fields">
         <input id="user-q" name="q" value="${esc(q)}" placeholder="email or user id" autocomplete="off">
-        <div class="field field--choice">
+        <div class="field field--choice user-search__select">
           <select id="user-status" name="status" aria-label="Status">
             <option value="">Any status</option>
             <option value="active"${status === "active" ? " selected" : ""}>active</option>

@@ -137,6 +137,44 @@ func (r *Resolver) resolve(ctx context.Context, appID uuid.UUID, provider string
 	}, nil
 }
 
+// OpenConnectionDirect decrypts a connection by ID without checking app bindings.
+func (r *Resolver) OpenConnectionDirect(ctx context.Context, id, provider string) (Resolved, error) {
+	if id == "" || id == DefaultConnectionID {
+		c, sec, ok := r.env.Get(provider)
+		if !ok {
+			return Resolved{}, ErrNotConfigured
+		}
+		return Resolved{
+			ConnectionID: DefaultConnectionID,
+			Provider:     provider,
+			Source:       "default",
+			Settings:     c.Settings,
+			Secrets:      sec,
+		}, nil
+	}
+	c, err := r.store.GetConnection(ctx, nil, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return Resolved{}, ErrConnectionNotFound
+		}
+		return Resolved{}, err
+	}
+	if provider != "" && c.Provider != provider {
+		return Resolved{}, ErrProviderMismatch
+	}
+	plain, err := r.box.Open(c.SecretsEnc, c.KeyVersion, secrets.ConnectionAAD(c.ID, c.Provider))
+	if err != nil {
+		return Resolved{}, err
+	}
+	return Resolved{
+		ConnectionID: c.ID,
+		Provider:     c.Provider,
+		Source:       "connection",
+		Settings:     c.Settings,
+		Secrets:      plain,
+	}, nil
+}
+
 // AppForConnection returns the single app bound to an exclusive connection.
 func (r *Resolver) AppForConnection(ctx context.Context, provider, connectionID string) (uuid.UUID, error) {
 	if !IsExclusive(provider) {

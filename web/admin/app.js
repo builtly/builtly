@@ -18,6 +18,7 @@ import { renderEmail } from "./views/email.js";
 import { renderUsers, renderUserDetail } from "./views/users.js";
 import { renderReferrals } from "./views/referrals.js";
 import { renderActivity } from "./views/activity.js";
+import { renderAI } from "./views/ai.js";
 import { renderOutbox } from "./views/outbox.js";
 import { renderAudit } from "./views/audit.js";
 import { fetchSetupStatus, renderSetup } from "./views/setup.js";
@@ -117,6 +118,7 @@ function shellHTML(parts, apps) {
       ${navLink(hashForApp(current.id, "keys"), "API keys", inApp && section === "keys")}
       ${navLink(hashForApp(current.id, "products"), "Products", inApp && section === "products")}
       ${navLink(hashForApp(current.id, "email"), "Email", inApp && section === "email")}
+      ${navLink(hashForApp(current.id, "ai"), "AI", inApp && section === "ai")}
       ${navLink(hashForApp(current.id, "users"), "Users", inApp && section === "users")}
       ${navLink(hashForApp(current.id, "activity"), "Activity", inApp && section === "activity")}
       ${navLink(hashForApp(current.id, "referrals"), "Referrals", inApp && section === "referrals")}
@@ -166,7 +168,7 @@ function shellHTML(parts, apps) {
         ${appNav}
         <div class="nav-section">Platform</div>
         ${navLink("#/apps", "All apps", parts[0] === "apps" && !parts[1])}
-        ${navLink("#/connections?provider=stripe", "Connections", parts[0] === "connections")}
+        ${navLink("#/connections?provider=google_oauth", "Connections", parts[0] === "connections")}
         ${navLink("#/outbox", "Outbox", parts[0] === "outbox")}
         ${navLink("#/audit", "Audit log", parts[0] === "audit")}
       </div>
@@ -433,6 +435,11 @@ async function route() {
       }
       if (section === "email") {
         await renderEmail(view, appID);
+        hydrate(view);
+        return;
+      }
+      if (section === "ai") {
+        await renderAI(view, appID);
         hydrate(view);
         return;
       }

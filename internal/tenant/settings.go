@@ -19,6 +19,32 @@ type Settings struct {
 	Analytics          AnalyticsSettings `json:"analytics"`
 	Affiliate          AffiliateSettings `json:"affiliate"`
 	Referral           ReferralSettings  `json:"referral"`
+	AI                 AISettings        `json:"ai"`
+}
+
+// AISettings configures the built-in AI gateway.
+type AISettings struct {
+	Enabled              bool              `json:"enabled"`
+	AllowDirectChat      bool              `json:"allow_direct_chat"`
+	MaxConcurrentPerUser int               `json:"max_concurrent_per_user"`
+	MaxContextMessages   int               `json:"max_context_messages"`
+	DefaultMaxTokens     int               `json:"default_max_tokens"`
+	Pricing              AIPricingSettings `json:"pricing"`
+}
+
+// AIPricingSettings controls AI credit deduction rates.
+type AIPricingSettings struct {
+	Mode                     string                    `json:"mode"` // per_request | per_token
+	DefaultCreditsPerRequest int64                     `json:"default_credits_per_request"`
+	Models                   map[string]AIModelPricing `json:"models"`
+}
+
+// AIModelPricing sets credit cost for a specific model.
+type AIModelPricing struct {
+	CreditsPerRequest  int64 `json:"credits_per_request"`
+	InputCreditsPer1K  int64 `json:"input_credits_per_1k"`
+	OutputCreditsPer1K int64 `json:"output_credits_per_1k"`
+	MinCredits         int64 `json:"min_credits"`
 }
 
 // AuthSettings controls sign-in methods.
@@ -89,6 +115,18 @@ func DefaultSettings() Settings {
 			RewardValue:     10,
 			ApplyWindowDays: 7,
 		},
+		AI: AISettings{
+			Enabled:              true,
+			AllowDirectChat:      true,
+			MaxConcurrentPerUser: 2,
+			MaxContextMessages:   40,
+			DefaultMaxTokens:     2048,
+			Pricing: AIPricingSettings{
+				Mode:                     "per_request",
+				DefaultCreditsPerRequest: 1,
+				Models:                   map[string]AIModelPricing{},
+			},
+		},
 	}
 }
 
@@ -119,7 +157,7 @@ func MergeSettings(base Settings, overlay Settings) (Settings, error) {
 			continue
 		}
 		// For nested objects, deep-merge.
-		if k == "auth" || k == "email" || k == "storage" || k == "analytics" || k == "affiliate" || k == "referral" {
+		if k == "auth" || k == "email" || k == "storage" || k == "analytics" || k == "affiliate" || k == "referral" || k == "ai" {
 			var baseObj, overObj map[string]json.RawMessage
 			_ = json.Unmarshal(merged[k], &baseObj)
 			_ = json.Unmarshal(v, &overObj)
