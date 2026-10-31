@@ -166,6 +166,37 @@ func ValidateSecretsJSON(provider string, plain []byte) error {
 	return nil
 }
 
+// MergePatchJSON merges a partial JSON object onto an existing JSON object.
+// Omitted keys keep their existing value; keys with a JSON null value are removed.
+func MergePatchJSON(existing, patch []byte) (json.RawMessage, error) {
+	base := map[string]any{}
+	if len(existing) > 0 {
+		if err := json.Unmarshal(existing, &base); err != nil {
+			return nil, err
+		}
+	}
+	if base == nil {
+		base = map[string]any{}
+	}
+	if len(patch) == 0 || string(patch) == "null" {
+		b, err := json.Marshal(base)
+		return b, err
+	}
+	var over map[string]any
+	if err := json.Unmarshal(patch, &over); err != nil {
+		return nil, err
+	}
+	for k, v := range over {
+		if v == nil {
+			delete(base, k)
+		} else {
+			base[k] = v
+		}
+	}
+	b, err := json.Marshal(base)
+	return b, err
+}
+
 // RedactDiff replaces secret-looking values in a diff map with "[redacted]".
 func RedactDiff(diff map[string]any) map[string]any {
 	out := make(map[string]any, len(diff))

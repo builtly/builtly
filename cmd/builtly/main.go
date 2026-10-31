@@ -53,8 +53,7 @@ func main() {
 	case "migrate":
 		os.Exit(runMigrate(os.Args[2:]))
 	case "secrets":
-		fmt.Fprintln(os.Stderr, "secrets: not implemented yet (M2+)")
-		os.Exit(1)
+		os.Exit(runSecrets(os.Args[2:]))
 	case "credits":
 		os.Exit(runCredits(os.Args[2:]))
 	case "version":
@@ -208,6 +207,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	registry.SetHandler(outbox.SubAnalytics, analytics.NewSubscriber(analytics.NewClient(hc), resolver).Handle)
 	registry.SetHandler(outbox.SubAffiliate, affiliate.NewSubscriber(affReg, resolver, tSvc).Handle)
 	publisher := outbox.NewPublisher(outboxStore, box, registry)
+	creditSvc.SetConsumeHook(ai.NewConsumeHook(tSvc, publisher))
 	emailStore := email.NewStore(database)
 	emailSvc := email.NewService(database, emailStore, publisher)
 	mailSub.SetCatalog(emailStore)
@@ -249,6 +249,20 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	registry.SetHandler(outbox.SubReferral, referral.NewSubscriber(referralSvc).Handle)
 	adminHandler := admin.NewHandler(database, tSvc, iSvc, resolver, auditStore, tStore, iStore, tMW, userStore, creditSvc, billingStore, outboxStore, box, catalogSvc, stripeClient, referralSvc)
 	adminHandler.SetEmailTemplates(emailSvc)
+	adminHandler.SetTrustedProxies(cfg.TrustedProxies)
+
+	cleaner := storage.NewCleaner(storageSvc, log)
+	cleaner.AddHook(func(ctx context.Context, now time.Time) {
+		if err := userStore.CleanupExpired(ctx, now); err != nil {
+			log.Error("cleanup expired auth tokens", "err", err)
+		}
+		if err := billingStore.ExpireStalePendingPurchases(ctx, now.Add(-48*time.Hour), now); err != nil {
+			log.Error("cleanup stale pending purchases", "err", err)
+		}
+		if err := outboxStore.DeleteDoneOlderThan(ctx, now.Add(-30*24*time.Hour)); err != nil {
+			log.Error("cleanup done outbox", "err", err)
+		}
+	})
 
 	srv := server.New(cfg, database, log, server.Deps{
 		Tenant:           tSvc,
@@ -270,7 +284,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 		Billing:          billing.NewHandler(billingSvc),
 		VoidedPoller:     billing.NewVoidedPoller(billingSvc),
 		Storage:          storage.NewHandler(storageSvc),
-		StorageCleaner:   storage.NewCleaner(storageSvc, log),
+		StorageCleaner:   cleaner,
 		Referral:         referral.NewHandler(referralSvc),
 		Email:            email.NewHandler(emailSvc, userStore),
 	})
@@ -375,4 +389,47 @@ func runCredits(args []string) int {
 			m.AppID, m.UserID, m.Balance, m.Sum, m.Problem)
 	}
 	return 1
+}
+
+func runSecrets(args []string) int {
+	if len(args) < 1 || args[0] != "rotate" {
+		fmt.Fprintln(os.Stderr, "usage: builtly secrets rotate")
+		return 2
+	}
+	cfg, err := load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		return 1
+	}
+	log := logx.Setup(cfg.LogLevel, cfg.LogFormat)
+	database, err := openDB(cfg)
+	if err != nil {
+		log.Error("db open failed", "err", err)
+		return 1
+	}
+	defer database.Close()
+
+	box, err := secrets.NewBox(cfg.EncryptionKeys)
+	if err != nil {
+		log.Error("secrets box failed", "err", err)
+		return 1
+	}
+	ctx := context.Background()
+	iStore := integration.NewStore(database)
+	envDefaults := integration.BuildEnvDefaults(cfg)
+	resolver := integration.NewResolver(iStore, box, envDefaults)
+	iSvc := integration.NewService(database, iStore, box, envDefaults, cfg.PublicURL, resolver)
+	connsRotated, err := iSvc.RotateSecrets(ctx)
+	if err != nil {
+		log.Error("rotate connections failed", "err", err)
+		return 1
+	}
+	outboxStore := outbox.NewStore(database)
+	outboxRotated, err := outboxStore.RotateSecrets(ctx, box)
+	if err != nil {
+		log.Error("rotate outbox failed", "err", err)
+		return 1
+	}
+	log.Info("secrets rotated", "connections", connsRotated, "outbox", outboxRotated, "active_version", box.ActiveVersion())
+	return 0
 }

@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/builtly/builtly/internal/apperr"
+	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/principal"
 	"github.com/builtly/builtly/internal/tenant"
@@ -38,7 +41,18 @@ func (h *UserHandler) GetLedger(w http.ResponseWriter, r *http.Request) {
 	app, _ := tenant.FromContext(r.Context())
 	p, _ := principal.FromContext(r.Context())
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	items, err := h.svc.ListLedger(r.Context(), app.ID, p.UserID, limit)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	afterT, afterID, err := httpx.DecodeCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	items, err := h.svc.ListLedgerPaged(r.Context(), app.ID, p.UserID, limit, db.Time(afterT), afterID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -52,5 +66,10 @@ func (h *UserHandler) GetLedger(w http.ResponseWriter, r *http.Request) {
 			"created_at": e.CreatedAt,
 		})
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": out, "next_cursor": nil})
+	var nextCursor any
+	if len(items) == limit && limit > 0 {
+		last := items[len(items)-1]
+		nextCursor = httpx.EncodeCursor(time.Time(last.CreatedAt), last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": out, "next_cursor": nextCursor})
 }

@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -214,6 +215,15 @@ func (s *Store) TryInsertWebhookEvent(ctx context.Context, q db.Querier, ev Webh
 	}
 	existing, err := s.GetWebhookEvent(ctx, q, ev.Provider, ev.ConnectionID, ev.EventID)
 	return existing, false, err
+}
+
+// ExpireStalePendingPurchases marks pending purchases older than cutoff as expired.
+func (s *Store) ExpireStalePendingPurchases(ctx context.Context, cutoff, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		UPDATE purchases SET status = ?, updated_at = ?
+		WHERE app_id IS NOT NULL AND status = ? AND created_at < ?`),
+		StatusExpired, db.Time(now.UTC()), StatusPending, db.Time(cutoff.UTC()))
+	return db.MapError(err)
 }
 
 // HasCompletedPurchase reports whether the user has any completed/refunded purchase.

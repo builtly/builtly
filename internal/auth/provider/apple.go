@@ -205,13 +205,18 @@ func (a *appleProvider) verify(ctx context.Context, idToken, nonce string, audie
 		return Identity{}, fmt.Errorf("apple: bad claims")
 	}
 	audOK := false
+	matchedAud := ""
 	switch aud := claims["aud"].(type) {
 	case string:
-		audOK = slices.Contains(audiences, aud)
+		if slices.Contains(audiences, aud) {
+			audOK = true
+			matchedAud = aud
+		}
 	case []any:
 		for _, x := range aud {
 			if s, ok := x.(string); ok && slices.Contains(audiences, s) {
 				audOK = true
+				matchedAud = s
 				break
 			}
 		}
@@ -219,8 +224,9 @@ func (a *appleProvider) verify(ctx context.Context, idToken, nonce string, audie
 	if !audOK {
 		return Identity{}, fmt.Errorf("apple: bad aud")
 	}
-	if nonce != "" {
-		if n, _ := claims["nonce"].(string); n != nonce {
+	claimNonce, _ := claims["nonce"].(string)
+	if nonce != "" || claimNonce != "" {
+		if claimNonce != nonce {
 			return Identity{}, fmt.Errorf("apple: nonce mismatch")
 		}
 	}
@@ -230,7 +236,7 @@ func (a *appleProvider) verify(ctx context.Context, idToken, nonce string, audie
 	if sub == "" {
 		return Identity{}, fmt.Errorf("apple: missing sub")
 	}
-	return Identity{Provider: Apple, Subject: sub, Email: email, EmailVerified: ev}, nil
+	return Identity{Provider: Apple, Subject: sub, Email: email, EmailVerified: ev, Audience: matchedAud}, nil
 }
 
 func (a *appleProvider) clientSecret(cfg Config, subject string) (string, error) {

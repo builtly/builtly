@@ -107,7 +107,8 @@ func (s *Service) applyRefund(ctx context.Context, tx *sqlx.Tx, p Purchase, targ
 	}
 	appID := p.AppID
 	payload, _ := json.Marshal(map[string]any{
-		"purchase_id": p.ID.String(), "delta": delta, "full": target == p.Credits,
+		"purchase_id": p.ID.String(), "user_id": p.UserID.String(),
+		"delta": delta, "full": target == p.Credits,
 		"refunded_credits": target, "source": source,
 	})
 	return s.outbox.PublishTx(ctx, tx, outbox.Event{
@@ -177,11 +178,28 @@ func (s *Service) fulfilCheckout(ctx context.Context, tx *sqlx.Tx, appID uuid.UU
 	}); err != nil {
 		return err
 	}
+	var sku string
+	if s.catalog != nil {
+		if prod, err := s.catalog.GetTx(ctx, tx, appID, p.ProductID); err == nil {
+			sku = prod.SKU
+		}
+	}
+	var affRef string
+	if p.AffiliateRef != nil {
+		affRef = *p.AffiliateRef
+	}
 	appIDCopy := appID
 	payload, _ := json.Marshal(map[string]any{
-		"purchase_id": p.ID.String(), "user_id": p.UserID.String(),
-		"product_id": p.ProductID.String(), "credits": p.Credits,
-		"provider": ProviderStripe, "amount": amountTotal, "currency": currency,
+		"purchase_id":   p.ID.String(),
+		"user_id":       p.UserID.String(),
+		"product_id":    p.ProductID.String(),
+		"product_sku":   sku,
+		"credits":       p.Credits,
+		"provider":      ProviderStripe,
+		"amount":        amountTotal,
+		"currency":      currency,
+		"environment":   p.Environment,
+		"affiliate_ref": affRef,
 	})
 	return s.outbox.PublishTx(ctx, tx, outbox.Event{
 		AppID: &appIDCopy, Type: outbox.EventPurchaseCompleted, Payload: payload,

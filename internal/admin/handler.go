@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -28,28 +29,32 @@ import (
 
 // Handler serves /api/v1/admin/* endpoints.
 type Handler struct {
-	db        *db.DB
-	tenant    *tenant.Service
-	integ     *integration.Service
-	resolv    *integration.Resolver
-	audit     *AuditStore
-	tStore    *tenant.Store
-	iStore    *integration.Store
-	tMW       *tenant.Middleware
-	users     *auth.Store
-	credits   *credit.Service
-	purchases *billing.Store
-	outbox    *outbox.Store
-	box       *secrets.Box
-	catalog   *catalog.Service
-	stripe    *stripeapi.Client
-	referrals *referral.Service
-	mail      email.Sender // nil → Resend; tests inject a sender
-	emails    *email.Service
+	db             *db.DB
+	tenant         *tenant.Service
+	integ          *integration.Service
+	resolv         *integration.Resolver
+	audit          *AuditStore
+	tStore         *tenant.Store
+	iStore         *integration.Store
+	tMW            *tenant.Middleware
+	users          *auth.Store
+	credits        *credit.Service
+	purchases      *billing.Store
+	outbox         *outbox.Store
+	box            *secrets.Box
+	catalog        *catalog.Service
+	stripe         *stripeapi.Client
+	referrals      *referral.Service
+	mail           email.Sender // nil → Resend; tests inject a sender
+	emails         *email.Service
+	trustedProxies []*net.IPNet
 }
 
 // SetEmailTemplates wires per-app template management.
 func (h *Handler) SetEmailTemplates(svc *email.Service) { h.emails = svc }
+
+// SetTrustedProxies configures trusted proxy CIDRs for client IP resolution in audit logs.
+func (h *Handler) SetTrustedProxies(proxies []*net.IPNet) { h.trustedProxies = proxies }
 
 // NewHandler constructs an admin Handler.
 func NewHandler(
@@ -139,9 +144,15 @@ func (h *Handler) listApps(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(apps))
 	for _, a := range apps {
+		userCount := 0
+		if h.users != nil {
+			if n, err := h.users.Count(r.Context(), nil, a.ID, "", ""); err == nil {
+				userCount = n
+			}
+		}
 		items = append(items, map[string]any{
 			"id": a.ID, "slug": a.Slug, "name": a.Name, "status": a.Status,
-			"user_count": 0, "created_at": a.CreatedAt,
+			"user_count": userCount, "created_at": a.CreatedAt,
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "next_cursor": nil})
@@ -151,13 +162,13 @@ func (h *Handler) createApp(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Slug     string          `json:"slug"`
 		Name     string          `json:"name"`
-		Settings tenant.Settings `json:"settings"`
+		Settings json.RawMessage `json:"settings"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	app, err := h.tenant.Create(r.Context(), body.Slug, body.Name, body.Settings)
+	app, err := h.tenant.CreateWithJSON(r.Context(), body.Slug, body.Name, body.Settings)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -230,14 +241,14 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Settings     tenant.Settings                      `json:"settings"`
+		Settings     json.RawMessage                      `json:"settings"`
 		Integrations *map[string]integration.BindingInput `json:"integrations"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	settings, err := tenant.MergeSettings(tenant.DefaultSettings(), body.Settings)
+	settings, err := tenant.MergeSettingsJSON(tenant.DefaultSettings(), body.Settings)
 	if err != nil {
 		httpx.WriteError(w, r, tenant.ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()}))
 		return
@@ -246,7 +257,6 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, tenant.ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()}))
 		return
 	}
-	body.Settings = settings
 
 	err = h.db.WithTx(r.Context(), func(tx *sqlx.Tx) error {
 		app, err := h.tStore.GetByID(r.Context(), tx, id)
@@ -257,7 +267,7 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		now := db.Now()
-		if err := h.tStore.UpdateSettings(r.Context(), tx, id, body.Settings, now); err != nil {
+		if err := h.tStore.UpdateSettings(r.Context(), tx, id, settings, now); err != nil {
 			return err
 		}
 		_ = app
@@ -272,7 +282,7 @@ func (h *Handler) putConfig(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		diff := map[string]any{"settings": body.Settings}
+		diff := map[string]any{"settings": settings}
 		if body.Integrations != nil {
 			diff["integrations"] = *body.Integrations
 		}
@@ -455,24 +465,30 @@ func (h *Handler) patchConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing.Provider == integration.ProviderStripe && (body.Secrets != nil || body.Settings != nil) {
-		sec := body.Secrets
-		if sec == nil {
-			// keep existing secrets — open via store path in enrich with empty secrets uses existing key from update flow
-			sec = json.RawMessage(`{}`)
+		resolved, err := h.integ.OpenConnection(r.Context(), id, integration.ProviderStripe)
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
 		}
-		// When secrets omitted, UpdateConnection keeps them; still re-validate if settings/secrets change with stripe client.
+		mergedSettings, err := integration.MergePatchJSON(resolved.Settings, settings)
+		if err != nil {
+			httpx.WriteError(w, r, integration.ErrValidationFailed.WithDetails(map[string]any{"reason": err.Error()}))
+			return
+		}
+		mergedSecrets := json.RawMessage(resolved.Secrets)
 		if body.Secrets != nil {
-			enriched, err := h.enrichStripeSettings(r, coalesceSettings(settings, existing.Settings), body.Secrets, id)
+			mergedSecrets, err = integration.MergePatchJSON(resolved.Secrets, body.Secrets)
 			if err != nil {
-				httpx.WriteError(w, r, err)
+				httpx.WriteError(w, r, integration.ErrInvalidSecrets.WithDetails(map[string]any{"reason": err.Error()}))
 				return
 			}
-			settings = enriched
-		} else if body.Settings != nil {
-			// settings-only patch: preserve account_id from existing
-			settings = body.Settings
 		}
-		_ = sec
+		enriched, err := h.enrichStripeSettings(r, mergedSettings, mergedSecrets, id)
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		settings = enriched
 	}
 	pc, err := h.integ.UpdateConnection(r.Context(), id, body.Name, settings, body.Secrets)
 	if err != nil {
@@ -644,7 +660,7 @@ func (h *Handler) writeAuditTx(r *http.Request, q db.Querier, appID *uuid.UUID, 
 	return h.audit.Insert(r.Context(), q, AuditEntry{
 		ID: uuid.Must(uuid.NewV7()), Actor: "admin", Action: action,
 		AppID: appID, TargetType: targetType, TargetID: targetID,
-		Diff: MustJSON(RedactDiffMap(diff)), IP: httpx.ClientIP(r, nil),
+		Diff: MustJSON(RedactDiffMap(diff)), IP: httpx.ClientIP(r, h.trustedProxies),
 		RequestID: reqID, CreatedAt: db.Now(),
 	})
 }

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -54,7 +55,9 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 				httpx.WriteError(w, r, apperr.Unauthorized)
 				return
 			}
-			p := principal.Principal{APIKeyID: k.ID, IsAPIKey: true, Actor: "api_key:" + k.ID.String()}
+			var scopes []string
+			_ = json.Unmarshal(k.Scopes, &scopes)
+			p := principal.Principal{APIKeyID: k.ID, IsAPIKey: true, Scopes: scopes, Actor: "api_key:" + k.ID.String()}
 			next.ServeHTTP(w, r.WithContext(principal.With(r.Context(), p)))
 			return
 		}

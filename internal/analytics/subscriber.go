@@ -113,9 +113,17 @@ func mapEvent(eventType string, raw []byte) (event, distinct string, props map[s
 	case outbox.EventUserRegistered:
 		return "user_signed_up", str(m["user_id"]), map[string]any{}, m["user_id"] != nil
 	case outbox.EventPurchaseCompleted:
+		referred, _ := m["referred"].(bool)
 		props = map[string]any{
-			"product_id": str(m["product_id"]), "credits": m["credits"],
-			"provider": str(m["provider"]), "amount": m["amount"], "currency": m["currency"],
+			"product_id":    str(m["product_id"]),
+			"product_sku":   str(m["product_sku"]),
+			"credits":       m["credits"],
+			"provider":      str(m["provider"]),
+			"amount":        m["amount"],
+			"currency":      m["currency"],
+			"environment":   str(m["environment"]),
+			"affiliate_ref": str(m["affiliate_ref"]),
+			"referred":      referred,
 		}
 		return "purchase_completed", str(m["user_id"]), props, m["user_id"] != nil
 	case outbox.EventPurchaseRefunded:

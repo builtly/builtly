@@ -50,9 +50,10 @@ function parseTrail(raw) {
   return raw.split("|").filter((p) => p !== "").map(decodeCursor);
 }
 
-function referralsHash(appID, { status = "", cursor = "", trail = [] } = {}) {
+function referralsHash(appID, { status = "", referrerID = "", cursor = "", trail = [] } = {}) {
   const p = new URLSearchParams();
   if (status) p.set("status", status);
+  if (referrerID) p.set("referrer_id", referrerID);
   if (cursor) p.set("cursor", cursor);
   if (trail.length) p.set("trail", trail.map(encodeCursor).join("|"));
   const qs = p.toString();
@@ -62,12 +63,14 @@ function referralsHash(appID, { status = "", cursor = "", trail = [] } = {}) {
 export async function renderReferrals(el, appID) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const status = params.get("status") || "";
+  const referrerID = params.get("referrer_id") || "";
   const cursor = params.get("cursor") || "";
   const trail = parseTrail(params.get("trail") || "");
   const page = trail.length + 1;
   el.innerHTML = `<div class="page-head"><h1>Referrals</h1><p class="muted">Loading…</p></div>`;
   const qs = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (status) qs.set("status", status);
+  if (referrerID) qs.set("referrer_id", referrerID);
   if (cursor) qs.set("cursor", cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/referrals?" + qs.toString());
   const items = data.items || [];
@@ -107,8 +110,9 @@ export async function renderReferrals(el, appID) {
     </div>
 
     <form id="ref-filters" class="toolbar user-search ref-filters">
-      <label class="user-search__label" for="filter-status">Filter</label>
+      <label class="user-search__label" for="filter-referrer">Filter</label>
       <div class="toolbar-fields ref-filters__fields">
+        <input id="filter-referrer" name="referrer_id" value="${esc(referrerID)}" placeholder="Referrer user ID" class="mono" autocomplete="off">
         <div class="field field--choice ref-filters__select">
           <select id="filter-status" name="status" aria-label="Status">
             <option value="">Any status</option>
@@ -118,6 +122,7 @@ export async function renderReferrals(el, appID) {
           </select>
         </div>
       </div>
+      <button type="submit">Filter</button>
     </form>
 
     <div class="table-wrap apps-table-wrap ref-table-wrap">
@@ -138,19 +143,29 @@ export async function renderReferrals(el, appID) {
   applyRevealDelays(el, ".ref-row[data-reveal]");
   wireMobileSelect(el.querySelector("#filter-status"), { title: "Status" });
 
+  el.querySelector("#ref-filters").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    location.hash = referralsHash(appID, {
+      status: String(fd.get("status") || ""),
+      referrerID: String(fd.get("referrer_id") || "").trim(),
+    });
+  });
+
   el.querySelector("#filter-status").addEventListener("change", (ev) => {
-    location.hash = referralsHash(appID, { status: ev.target.value });
+    const refVal = String(el.querySelector("#filter-referrer")?.value || "").trim();
+    location.hash = referralsHash(appID, { status: ev.target.value, referrerID: refVal });
   });
 
   el.querySelector("#ref-prev").addEventListener("click", () => {
     if (!trail.length) return;
     const prev = trail[trail.length - 1] || "";
-    location.hash = referralsHash(appID, { status, cursor: prev, trail: trail.slice(0, -1) });
+    location.hash = referralsHash(appID, { status, referrerID, cursor: prev, trail: trail.slice(0, -1) });
   });
 
   el.querySelector("#ref-next").addEventListener("click", () => {
     if (!nextCursor) return;
-    location.hash = referralsHash(appID, { status, cursor: nextCursor, trail: [...trail, cursor] });
+    location.hash = referralsHash(appID, { status, referrerID, cursor: nextCursor, trail: [...trail, cursor] });
   });
 
   el.querySelectorAll(".void-ref").forEach((btn) => {

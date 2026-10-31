@@ -13,6 +13,7 @@ import (
 
 	"github.com/builtly/builtly/internal/integration"
 	"github.com/builtly/builtly/internal/platform/db"
+	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/tenant"
 )
 
@@ -175,23 +176,11 @@ func (s *Service) Get(ctx context.Context, app tenant.App, userID, fileID uuid.U
 
 // List returns uploaded files.
 func (s *Service) List(ctx context.Context, appID, userID uuid.UUID, limit int, cursor string) ([]File, string, error) {
-	var after db.Time
-	var afterID uuid.UUID
-	if cursor != "" {
-		parts := strings.SplitN(cursor, ",", 2)
-		if len(parts) != 2 {
-			return nil, "", ErrValidationFailed
-		}
-		t, err := time.Parse(time.RFC3339Nano, parts[0])
-		if err != nil {
-			return nil, "", ErrValidationFailed
-		}
-		after = db.Time(t)
-		afterID, err = uuid.Parse(parts[1])
-		if err != nil {
-			return nil, "", ErrValidationFailed
-		}
+	afterT, afterID, err := httpx.DecodeCursor(cursor)
+	if err != nil {
+		return nil, "", ErrValidationFailed
 	}
+	after := db.Time(afterT)
 	rows, err := s.store.ListUploaded(ctx, nil, appID, userID, limit, after, afterID)
 	if err != nil {
 		return nil, "", err

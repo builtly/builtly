@@ -310,4 +310,50 @@ func TestPutConfigOmitsIntegrationsPreservesBindings(t *testing.T) {
 	if resend["source"] == "binding" || resend["connection_id"] == connID {
 		t.Fatalf("expected DB binding cleared, got %#v", resend)
 	}
+
+	// Explicit false/0 values in settings (e.g. password_enabled=false, apply_window_days=0) must persist.
+	rr = do("PUT", "/api/v1/admin/apps/"+appID+"/config", map[string]any{
+		"settings": map[string]any{
+			"auth":     map[string]any{"password_enabled": false, "providers": []string{"google"}},
+			"referral": map[string]any{"enabled": true, "apply_window_days": 0},
+		},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("put false/zero settings: %d %s", rr.Code, rr.Body.String())
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &cfg)
+	settings = cfg["settings"].(map[string]any)
+	authCfg := settings["auth"].(map[string]any)
+	if authCfg["password_enabled"] != false {
+		t.Fatalf("expected password_enabled=false, got %#v", authCfg)
+	}
+	refCfg := settings["referral"].(map[string]any)
+	if refCfg["apply_window_days"] != float64(0) {
+		t.Fatalf("expected apply_window_days=0, got %#v", refCfg)
+	}
+
+	// Partial secret update on R2 connection (omitted secret_access_key kept).
+	rr = do("POST", "/api/v1/admin/connections", map[string]any{
+		"provider": "r2", "name": "Storage",
+		"settings": map[string]any{"account_id": "acc1", "bucket": "b1"},
+		"secrets":  map[string]any{"access_key_id": "AKIA11112222", "secret_access_key": "SECRET_KEEP_9999"},
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create r2 conn: %d %s", rr.Code, rr.Body.String())
+	}
+	var r2Conn map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &r2Conn)
+	r2ID := r2Conn["id"].(string)
+
+	rr = do("PATCH", "/api/v1/admin/connections/"+r2ID, map[string]any{
+		"secrets": map[string]any{"access_key_id": "AKIA33334444"},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("patch r2 partial secret: %d %s", rr.Code, rr.Body.String())
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &r2Conn)
+	secMap := r2Conn["secrets"].(map[string]any)
+	if !strings.HasSuffix(secMap["access_key_id"].(string), "4444") || !strings.HasSuffix(secMap["secret_access_key"].(string), "9999") {
+		t.Fatalf("unexpected masked secrets after partial patch: %#v", secMap)
+	}
 }

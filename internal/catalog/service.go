@@ -48,7 +48,12 @@ func (s *Service) List(ctx context.Context, appID uuid.UUID, activeOnly bool) ([
 
 // Get returns one product.
 func (s *Service) Get(ctx context.Context, appID, id uuid.UUID) (Product, error) {
-	p, err := s.store.GetByID(ctx, nil, appID, id)
+	return s.GetTx(ctx, nil, appID, id)
+}
+
+// GetTx returns one product using the provided querier (or the pool when q is nil).
+func (s *Service) GetTx(ctx context.Context, q db.Querier, appID, id uuid.UUID) (Product, error) {
+	p, err := s.store.GetByID(ctx, q, appID, id)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return Product{}, ErrProductNotFound

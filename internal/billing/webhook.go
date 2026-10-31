@@ -266,13 +266,17 @@ func (s *Service) dispatchStripe(ctx context.Context, connectionID string, webho
 			return WebhookIgnored, "app mismatch", appID, false
 		}
 		key := "refund_reversal:stripe-dispute:" + d.ID
+		disputeKey := "refund:stripe-dispute:" + d.ID
 		err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 			cur, err := s.store.GetPurchaseByID(ctx, tx, p.AppID, p.ID)
 			if err != nil {
 				return err
 			}
-			// Reverse full dispute clawback (credits).
-			return s.applyRefundReversal(ctx, tx, cur, cur.Credits, key, "stripe_dispute_won")
+			restore := cur.Credits
+			if disputeEntry, err := s.credits.GetByIdempotencyKeyTx(ctx, tx, p.AppID, disputeKey); err == nil && disputeEntry.Amount < 0 {
+				restore = -disputeEntry.Amount
+			}
+			return s.applyRefundReversal(ctx, tx, cur, restore, key, "stripe_dispute_won")
 		})
 		if err != nil {
 			return WebhookFailed, err.Error(), appID, true

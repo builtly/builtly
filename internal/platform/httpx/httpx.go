@@ -2,6 +2,7 @@
 package httpx
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/builtly/builtly/internal/apperr"
 	"github.com/builtly/builtly/internal/platform/logx"
@@ -49,24 +53,70 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 
 // WriteError renders err: *apperr.Error as its status/code; anything else as 500 internal.
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
+	reqID := ""
+	if r != nil {
+		reqID = r.Header.Get("X-Request-ID")
+	}
 	var ae *apperr.Error
 	if errors.As(err, &ae) {
-		WriteJSON(w, ae.Status, map[string]any{
-			"error": map[string]any{
-				"code":    ae.Code,
-				"message": ae.Message,
-				"details": ae.Details,
-			},
-		})
+		if ae.Status == http.StatusTooManyRequests && w.Header().Get("Retry-After") == "" {
+			w.Header().Set("Retry-After", "60")
+		}
+		errObj := map[string]any{
+			"code":    ae.Code,
+			"message": ae.Message,
+			"details": ae.Details,
+		}
+		if reqID != "" {
+			errObj["request_id"] = reqID
+		}
+		WriteJSON(w, ae.Status, map[string]any{"error": errObj})
 		return
 	}
 	logx.From(r.Context()).Error("request failed", slog.String("err", err.Error()))
-	WriteJSON(w, http.StatusInternalServerError, map[string]any{
-		"error": map[string]any{
-			"code":    "internal",
-			"message": "an unexpected error occurred",
-		},
-	})
+	errObj := map[string]any{
+		"code":    "internal",
+		"message": "an unexpected error occurred",
+	}
+	if reqID != "" {
+		errObj["request_id"] = reqID
+	}
+	WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": errObj})
+}
+
+// EncodeCursor encodes a (created_at, id) keyset cursor as opaque base64url.
+func EncodeCursor(createdAt time.Time, id uuid.UUID) string {
+	raw := createdAt.UTC().Format(time.RFC3339Nano) + "," + id.String()
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+// DecodeCursor parses a keyset cursor (accepts both base64url and raw "RFC3339Nano,UUID").
+func DecodeCursor(cursor string) (time.Time, uuid.UUID, error) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return time.Time{}, uuid.Nil, nil
+	}
+	raw := cursor
+	if !strings.Contains(raw, ",") {
+		if decoded, err := base64.RawURLEncoding.DecodeString(cursor); err == nil {
+			raw = string(decoded)
+		} else if decoded, err := base64.URLEncoding.DecodeString(cursor); err == nil {
+			raw = string(decoded)
+		}
+	}
+	parts := strings.SplitN(raw, ",", 2)
+	if len(parts) != 2 {
+		return time.Time{}, uuid.Nil, errors.New("invalid cursor")
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	id, err := uuid.Parse(parts[1])
+	if err != nil {
+		return time.Time{}, uuid.Nil, err
+	}
+	return t, id, nil
 }
 
 // ClientIP returns the client IP, honoring X-Forwarded-For only from trusted proxies.

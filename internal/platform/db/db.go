@@ -87,8 +87,12 @@ func Open(driver, dsn string, maxOpen int) (*DB, error) {
 		if maxOpen <= 0 {
 			maxOpen = 20
 		}
+		maxIdle := maxOpen / 2
+		if maxIdle < 1 {
+			maxIdle = 1
+		}
 		x.SetMaxOpenConns(maxOpen)
-		x.SetMaxIdleConns(maxOpen / 2)
+		x.SetMaxIdleConns(maxIdle)
 		x.SetConnMaxLifetime(30 * time.Minute)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

@@ -8,7 +8,7 @@ function outboxStamp(status) {
   const s = status || "unknown";
   let tone = "unknown";
   if (s === "done") tone = "active";
-  else if (s === "pending" || s === "processing") tone = "pending";
+  else if (s === "pending") tone = "pending";
   else if (s === "dead") tone = "disabled";
   return `<span class="user-stamp user-stamp--${tone}">${esc(s)}</span>`;
 }
@@ -115,8 +115,8 @@ export async function renderOutbox(el) {
           <select name="status" id="ob-status" aria-label="Status">
             <option value="">Any status</option>
             <option value="pending"${status === "pending" ? " selected" : ""}>pending</option>
-            <option value="processing"${status === "processing" ? " selected" : ""}>processing</option>
             <option value="done"${status === "done" ? " selected" : ""}>done</option>
+            <option value="skipped"${status === "skipped" ? " selected" : ""}>skipped</option>
             <option value="dead"${status === "dead" ? " selected" : ""}>dead</option>
           </select>
         </div>

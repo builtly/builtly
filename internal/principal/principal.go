@@ -15,8 +15,25 @@ type Principal struct {
 	UserID   uuid.UUID
 	APIKeyID uuid.UUID
 	IsAPIKey bool
+	Scopes   []string
 	Actor    string // user:<id> | api_key:<id>
 	IssuedAt time.Time
+}
+
+// HasScope reports whether the principal has the given scope (empty Scopes on APIKey defaults to credits:consume).
+func (p Principal) HasScope(scope string) bool {
+	if !p.IsAPIKey {
+		return true
+	}
+	if len(p.Scopes) == 0 {
+		return scope == "credits:consume"
+	}
+	for _, s := range p.Scopes {
+		if s == scope || s == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // FromContext returns the principal attached by auth middleware.

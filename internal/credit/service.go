@@ -12,15 +12,24 @@ import (
 	"github.com/builtly/builtly/internal/platform/db"
 )
 
+// ConsumeHook is called inside the Consume transaction after a new ledger entry is inserted.
+type ConsumeHook func(ctx context.Context, tx *sqlx.Tx, entry Entry, feature string) error
+
 // Service is the only writer of credit_balances / credit_ledger.
 type Service struct {
-	store *Store
-	db    *db.DB
+	store       *Store
+	db          *db.DB
+	consumeHook ConsumeHook
 }
 
 // NewService constructs a credit Service.
 func NewService(database *db.DB, store *Store) *Service {
 	return &Service{store: store, db: database}
+}
+
+// SetConsumeHook registers an optional transaction hook invoked on non-replayed consumes.
+func (s *Service) SetConsumeHook(fn ConsumeHook) {
+	s.consumeHook = fn
 }
 
 // GetBalance returns the current balance (0 if no row).
@@ -38,6 +47,21 @@ func (s *Service) GetBalance(ctx context.Context, appID, userID uuid.UUID) (Bala
 // ListLedger returns recent ledger entries.
 func (s *Service) ListLedger(ctx context.Context, appID, userID uuid.UUID, limit int) ([]Entry, error) {
 	return s.store.ListEntries(ctx, nil, appID, userID, limit)
+}
+
+// ListLedgerPaged returns recent ledger entries for a user with optional keyset cursor.
+func (s *Service) ListLedgerPaged(ctx context.Context, appID, userID uuid.UUID, limit int, after db.Time, afterID uuid.UUID) ([]Entry, error) {
+	return s.store.ListEntriesPaged(ctx, nil, appID, userID, limit, after, afterID)
+}
+
+// GetByIdempotencyKey loads a ledger entry by app + idempotency key.
+func (s *Service) GetByIdempotencyKey(ctx context.Context, appID uuid.UUID, key string) (Entry, error) {
+	return s.store.GetEntryByIdempotencyKey(ctx, nil, appID, key)
+}
+
+// GetByIdempotencyKeyTx loads a ledger entry by app + idempotency key inside an existing transaction.
+func (s *Service) GetByIdempotencyKeyTx(ctx context.Context, q db.Querier, appID uuid.UUID, key string) (Entry, error) {
+	return s.store.GetEntryByIdempotencyKey(ctx, q, appID, key)
 }
 
 // ListAppLedger returns recent ledger entries for an app.
@@ -129,6 +153,11 @@ func (s *Service) Consume(ctx context.Context, appID, userID uuid.UUID, amount i
 					return errRetryConsume
 				}
 				return err
+			}
+			if s.consumeHook != nil {
+				if err := s.consumeHook(ctx, tx, e, feature); err != nil {
+					return err
+				}
 			}
 			result = ConsumeResult{Entry: e, Balance: newBal, Replayed: false}
 			return nil

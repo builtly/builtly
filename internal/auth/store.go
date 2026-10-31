@@ -325,12 +325,15 @@ func (s *Store) GetOAuthFlowByLoginCodeHash(ctx context.Context, q db.Querier, h
 	return f, nil
 }
 
-// AuthenticateOAuthFlow marks flow authenticated with login code + user.
-func (s *Store) AuthenticateOAuthFlow(ctx context.Context, q db.Querier, id uuid.UUID, userID uuid.UUID, loginHash []byte, now db.Time) error {
+// AuthenticateOAuthFlow marks flow authenticated with login code + user + outcome metadata.
+func (s *Store) AuthenticateOAuthFlow(ctx context.Context, q db.Querier, id uuid.UUID, userID uuid.UUID, loginHash []byte, outcomeJSON []byte, now db.Time) error {
+	if len(outcomeJSON) == 0 {
+		outcomeJSON = []byte(`{}`)
+	}
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
-		UPDATE oauth_flows SET status = ?, user_id = ?, login_code_hash = ?, expires_at = ?
+		UPDATE oauth_flows SET status = ?, user_id = ?, login_code_hash = ?, attribution = ?, expires_at = ?
 		WHERE id = ? AND status = ?`),
-		FlowAuthenticated, userID, loginHash, db.Time(now.Time().Add(2*time.Minute)), id, FlowStarted)
+		FlowAuthenticated, userID, loginHash, outcomeJSON, db.Time(now.Time().Add(2*time.Minute)), id, FlowStarted)
 	return db.MapError(err)
 }
 
@@ -452,6 +455,31 @@ func (s *Store) ConsumeEmailTokensForUserPurpose(ctx context.Context, q db.Queri
 		WHERE app_id = ? AND user_id = ? AND purpose = ? AND consumed_at IS NULL`),
 		now, appID, userID, purpose)
 	return db.MapError(err)
+}
+
+// ConsumeAllEmailTokensForUser marks all unconsumed email tokens for a user as consumed.
+func (s *Store) ConsumeAllEmailTokensForUser(ctx context.Context, q db.Querier, appID, userID uuid.UUID, now db.Time) error {
+	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
+		UPDATE email_tokens SET consumed_at = COALESCE(consumed_at, ?)
+		WHERE app_id = ? AND user_id = ? AND consumed_at IS NULL`),
+		now, appID, userID)
+	return db.MapError(err)
+}
+
+// CleanupExpired purges expired oauth_flows, email_tokens, and refresh_tokens (> 30 days past expiry).
+func (s *Store) CleanupExpired(ctx context.Context, now time.Time) error {
+	nowDB := db.Time(now.UTC())
+	refreshCutoff := db.Time(now.UTC().Add(-30 * 24 * time.Hour))
+	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM oauth_flows WHERE expires_at < ?`), nowDB); err != nil {
+		return db.MapError(err)
+	}
+	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM email_tokens WHERE app_id IS NOT NULL AND expires_at < ?`), nowDB); err != nil {
+		return db.MapError(err)
+	}
+	if _, err := s.db.ExecContext(ctx, s.db.Rebind(`DELETE FROM refresh_tokens WHERE app_id IS NOT NULL AND expires_at < ?`), refreshCutoff); err != nil {
+		return db.MapError(err)
+	}
+	return nil
 }
 
 // ResetPasswordAndVerify sets password, marks email verified, clears reset tokens.

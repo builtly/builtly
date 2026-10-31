@@ -43,6 +43,11 @@ func NewService(database *db.DB, store *Store) *Service {
 
 // Get returns an app by ID, using the in-memory cache.
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (App, error) {
+	return s.GetTx(ctx, nil, id)
+}
+
+// GetTx returns an app by ID using the in-memory cache or the provided querier.
+func (s *Service) GetTx(ctx context.Context, q db.Querier, id uuid.UUID) (App, error) {
 	s.mu.RLock()
 	if e, ok := s.cache[id]; ok && time.Since(e.at) < s.ttl {
 		s.mu.RUnlock()
@@ -50,7 +55,7 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (App, error) {
 	}
 	s.mu.RUnlock()
 
-	app, err := s.store.GetByID(ctx, nil, id)
+	app, err := s.store.GetByID(ctx, q, id)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			return App{}, ErrAppNotFound
@@ -79,12 +84,25 @@ func (s *Service) InvalidateAll() {
 
 // Create creates an app with defaults merged into settings.
 func (s *Service) Create(ctx context.Context, slug, name string, partial Settings) (App, error) {
-	if !slugRe.MatchString(slug) {
-		return App{}, ErrInvalidSlug
-	}
 	settings, err := MergeSettings(DefaultSettings(), partial)
 	if err != nil {
 		return App{}, ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()})
+	}
+	return s.createWithResolvedSettings(ctx, slug, name, settings)
+}
+
+// CreateWithJSON creates an app by overlaying raw JSON settings onto DefaultSettings().
+func (s *Service) CreateWithJSON(ctx context.Context, slug, name string, rawSettings json.RawMessage) (App, error) {
+	settings, err := MergeSettingsJSON(DefaultSettings(), rawSettings)
+	if err != nil {
+		return App{}, ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()})
+	}
+	return s.createWithResolvedSettings(ctx, slug, name, settings)
+}
+
+func (s *Service) createWithResolvedSettings(ctx context.Context, slug, name string, settings Settings) (App, error) {
+	if !slugRe.MatchString(slug) {
+		return App{}, ErrInvalidSlug
 	}
 	if err := settings.Validate(); err != nil {
 		return App{}, ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()})
@@ -245,6 +263,10 @@ func (s *Service) LookupAPIKey(ctx context.Context, raw string) (APIKey, error) 
 	}
 	if k.RevokedAt.Valid {
 		return APIKey{}, ErrAPIKeyRevoked
+	}
+	now := time.Now().UTC()
+	if !k.LastUsedAt.Valid || now.Sub(k.LastUsedAt.Time.Time()) >= time.Minute {
+		_ = s.store.TouchAPIKeyLastUsed(ctx, nil, k.AppID, k.ID, db.Time(now))
 	}
 	return k, nil
 }

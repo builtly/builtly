@@ -28,6 +28,7 @@ type Identity struct {
 	Name          string
 	AvatarURL     string
 	RefreshToken  string // Apple only
+	Audience      string // Verified aud claim
 }
 
 // WebProvider is the browser redirect OAuth adapter.

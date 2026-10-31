@@ -76,7 +76,7 @@ func (s *Service) CreateConnection(ctx context.Context, provider, name string, s
 	return s.toPublic(ctx, c, secretsJSON)
 }
 
-// UpdateConnection patches name/settings/secrets (nil secretsJSON keeps existing).
+// UpdateConnection patches name/settings/secrets (omitted fields in settings/secrets keep existing; null clears).
 func (s *Service) UpdateConnection(ctx context.Context, id string, name *string, settings, secretsJSON json.RawMessage) (PublicConnection, error) {
 	c, err := s.store.GetConnection(ctx, nil, id)
 	if err != nil {
@@ -93,19 +93,27 @@ func (s *Service) UpdateConnection(ctx context.Context, id string, name *string,
 		c.Name = *name
 	}
 	if settings != nil {
-		c.Settings = []byte(settings)
+		mergedSettings, err := MergePatchJSON(c.Settings, settings)
+		if err != nil {
+			return PublicConnection{}, ErrValidationFailed.WithDetails(map[string]any{"reason": err.Error()})
+		}
+		c.Settings = []byte(mergedSettings)
 	}
 	if secretsJSON != nil {
-		if err := ValidateSecretsJSON(c.Provider, secretsJSON); err != nil {
+		mergedSecrets, err := MergePatchJSON(plain, secretsJSON)
+		if err != nil {
 			return PublicConnection{}, ErrInvalidSecrets.WithDetails(map[string]any{"reason": err.Error()})
 		}
-		enc, ver, err := s.box.Seal([]byte(secretsJSON), secrets.ConnectionAAD(c.ID, c.Provider))
+		if err := ValidateSecretsJSON(c.Provider, mergedSecrets); err != nil {
+			return PublicConnection{}, ErrInvalidSecrets.WithDetails(map[string]any{"reason": err.Error()})
+		}
+		enc, ver, err := s.box.Seal([]byte(mergedSecrets), secrets.ConnectionAAD(c.ID, c.Provider))
 		if err != nil {
 			return PublicConnection{}, err
 		}
 		c.SecretsEnc = enc
 		c.KeyVersion = ver
-		plain = []byte(secretsJSON)
+		plain = []byte(mergedSecrets)
 	}
 	c.UpdatedAt = db.Now()
 	if err := s.store.UpdateConnection(ctx, nil, c); err != nil {
@@ -132,6 +140,36 @@ func (s *Service) DeleteConnection(ctx context.Context, id string) error {
 	}
 	s.resolver.Invalidate()
 	return nil
+}
+
+// RotateSecrets re-encrypts all stored connections with the active key in s.box.
+func (s *Service) RotateSecrets(ctx context.Context) (int, error) {
+	rows, err := s.store.ListConnections(ctx, nil, "")
+	if err != nil {
+		return 0, err
+	}
+	rotated := 0
+	now := db.Now()
+	for _, c := range rows {
+		aad := secrets.ConnectionAAD(c.ID, c.Provider)
+		plain, err := s.box.Open(c.SecretsEnc, c.KeyVersion, aad)
+		if err != nil {
+			return rotated, err
+		}
+		enc, ver, err := s.box.Seal(plain, aad)
+		if err != nil {
+			return rotated, err
+		}
+		c.SecretsEnc = enc
+		c.KeyVersion = ver
+		c.UpdatedAt = now
+		if err := s.store.UpdateConnection(ctx, nil, c); err != nil {
+			return rotated, err
+		}
+		rotated++
+	}
+	s.resolver.Invalidate()
+	return rotated, nil
 }
 
 // OpenConnection decrypts a stored connection, or the env default when id is "default".

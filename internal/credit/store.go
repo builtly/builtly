@@ -202,15 +202,33 @@ func (s *Store) ListAppEntries(ctx context.Context, q db.Querier, appID uuid.UUI
 
 // ListEntries returns ledger rows for a user, newest first.
 func (s *Store) ListEntries(ctx context.Context, q db.Querier, appID, userID uuid.UUID, limit int) ([]Entry, error) {
+	return s.ListEntriesPaged(ctx, q, appID, userID, limit, db.Time{}, uuid.Nil)
+}
+
+// ListEntriesPaged returns ledger rows for a user with optional keyset cursor.
+func (s *Store) ListEntriesPaged(ctx context.Context, q db.Querier, appID, userID uuid.UUID, limit int, after db.Time, afterID uuid.UUID) ([]Entry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	if limit > 100 {
+		limit = 100
+	}
 	var rows []Entry
-	err := s.q(q).SelectContext(ctx, &rows, s.db.Rebind(`
-		SELECT id, app_id, user_id, entry_type, amount, balance_after, idempotency_key,
-		       reference_type, reference_id, actor, reason, metadata, created_at
-		FROM credit_ledger WHERE app_id = ? AND user_id = ?
-		ORDER BY created_at DESC, id DESC LIMIT ?`), appID, userID, limit)
+	var err error
+	if afterID == uuid.Nil {
+		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(`
+			SELECT id, app_id, user_id, entry_type, amount, balance_after, idempotency_key,
+			       reference_type, reference_id, actor, reason, metadata, created_at
+			FROM credit_ledger WHERE app_id = ? AND user_id = ?
+			ORDER BY created_at DESC, id DESC LIMIT ?`), appID, userID, limit)
+	} else {
+		err = s.q(q).SelectContext(ctx, &rows, s.db.Rebind(`
+			SELECT id, app_id, user_id, entry_type, amount, balance_after, idempotency_key,
+			       reference_type, reference_id, actor, reason, metadata, created_at
+			FROM credit_ledger WHERE app_id = ? AND user_id = ?
+			  AND (created_at < ? OR (created_at = ? AND id < ?))
+			ORDER BY created_at DESC, id DESC LIMIT ?`), appID, userID, after, after, afterID, limit)
+	}
 	return rows, db.MapError(err)
 }
 

@@ -45,10 +45,10 @@ function appInitials(name, slug) {
   return src.slice(0, 2).toUpperCase();
 }
 
-function bindStamp(bound) {
-  return bound
-    ? `<span class="user-stamp user-stamp--active">bound</span>`
-    : `<span class="user-stamp user-stamp--unknown">unbound</span>`;
+function bindStamp(bound, source) {
+  if (bound) return `<span class="user-stamp user-stamp--active">bound</span>`;
+  if (source === "default") return `<span class="user-stamp user-stamp--pending">env default</span>`;
+  return `<span class="user-stamp user-stamp--unknown">unbound</span>`;
 }
 
 function connectionLink(provider, connectionID, byID) {
@@ -152,7 +152,7 @@ export async function renderAppDetail(el, appID) {
   ]);
   const integ = cfg.integrations || {};
   const byID = new Map((connections.items || []).map((c) => [c.id, c]));
-  const bound = PROVIDERS.filter((p) => integ[p] && integ[p].connection_id).length;
+  const bound = PROVIDERS.filter((p) => integ[p] && (integ[p].source === "binding" || integ[p].connection_id)).length;
   const mark = appInitials(app.name, app.slug);
 
   let reveal = 0;
@@ -160,11 +160,11 @@ export async function renderAppDetail(el, appID) {
     const group = `<tr class="ov-group-row"><td colspan="3">${esc(g.label)}</td></tr>`;
     const rows = g.providers.map((p) => {
       const e = integ[p] || {};
-      const isBound = !!(e.connection_id);
+      const isBound = e.source === "binding" || (!!e.connection_id && e.source !== "default");
       const i = reveal++;
       return `<tr class="ov-bind-row" data-reveal="${i}">
         <td class="ov-bind-provider">${esc(PROVIDER_LABELS[p] || p)}</td>
-        <td>${bindStamp(isBound)}</td>
+        <td>${bindStamp(isBound, e.source)}</td>
         <td class="ov-bind-conn">${connectionLink(p, e.connection_id, byID)}</td>
       </tr>`;
     }).join("");
@@ -296,11 +296,13 @@ export async function renderAppConfig(el, appID) {
   const groupsHTML = PROVIDER_GROUPS.map((g) => {
     const rows = g.providers.map((p) => {
       const cur = (cfg.integrations && cfg.integrations[p]) || {};
-      const curID = cur.connection_id || "";
-      const isBound = !!curID;
+      const isExplicitBinding = cur.source === "binding" || (!!cur.connection_id && cur.source !== "default");
+      const curID = isExplicitBinding ? (cur.connection_id || "") : "";
+      const isBound = isExplicitBinding;
       const list = byProvider[p] || [];
+      const notBoundLabel = cur.source === "default" ? "Not bound (uses env default)" : "Not bound";
       const opts = [
-        `<option value="">Not bound</option>`,
+        `<option value="">${esc(notBoundLabel)}</option>`,
         `<option value="default" ${curID === "default" ? "selected" : ""}>Env default</option>`,
         ...list.filter((c) => c.id !== "default").map((c) =>
           `<option value="${esc(c.id)}" ${curID === c.id ? "selected" : ""}>${esc(c.name)}</option>`),
@@ -313,7 +315,7 @@ export async function renderAppConfig(el, appID) {
           <div class="ig-bind__head">
             <div class="ig-bind__title">
               <strong>${esc(PROVIDER_LABELS[p] || p)}</strong>
-              ${bindStamp(isBound)}
+              ${bindStamp(isBound, cur.source)}
             </div>
             <a class="ig-bind__cred" href="#/connections?provider=${encodeURIComponent(p)}">Credentials</a>
           </div>

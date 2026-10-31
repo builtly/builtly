@@ -108,8 +108,9 @@ func (g *googleProvider) verify(ctx context.Context, cfg Config, idToken, nonce 
 	if !audOK {
 		return Identity{}, fmt.Errorf("google: bad aud")
 	}
-	if nonce != "" {
-		if n, _ := claims["nonce"].(string); n != nonce {
+	claimNonce, _ := claims["nonce"].(string)
+	if nonce != "" || claimNonce != "" {
+		if claimNonce != nonce {
 			return Identity{}, fmt.Errorf("google: nonce mismatch")
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/builtly/builtly/internal/credit"
 	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/db"
+	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/tenant"
 )
 
@@ -279,18 +280,7 @@ func (s *Service) VoidAsReferee(ctx context.Context, tx *sqlx.Tx, appID, userID 
 }
 
 func parseCursor(cursor string) (db.Time, uuid.UUID, error) {
-	if cursor == "" {
-		return db.Time{}, uuid.Nil, nil
-	}
-	parts := strings.SplitN(cursor, ",", 2)
-	if len(parts) != 2 {
-		return db.Time{}, uuid.Nil, ErrValidation
-	}
-	t, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil {
-		return db.Time{}, uuid.Nil, ErrValidation
-	}
-	id, err := uuid.Parse(parts[1])
+	t, id, err := httpx.DecodeCursor(cursor)
 	if err != nil {
 		return db.Time{}, uuid.Nil, ErrValidation
 	}

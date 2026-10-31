@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/builtly/builtly/internal/platform/db"
+	"github.com/builtly/builtly/internal/platform/secrets"
 )
 
 // Store persists outbox rows.
@@ -180,4 +181,37 @@ func truncateErr(s string) string {
 		return s
 	}
 	return s[:max]
+}
+
+// DeleteDoneOlderThan purges completed outbox rows older than cutoff.
+func (s *Store) DeleteDoneOlderThan(ctx context.Context, cutoff time.Time) error {
+	_, err := s.db.ExecContext(ctx, s.db.Rebind(`
+		DELETE FROM outbox WHERE status = 'done' AND finished_at IS NOT NULL AND finished_at < ?`),
+		db.Time(cutoff.UTC()))
+	return db.MapError(err)
+}
+
+// RotateSecrets re-encrypts all outbox payloads with the active key in box.
+func (s *Store) RotateSecrets(ctx context.Context, box *secrets.Box) (int, error) {
+	var rows []Row
+	if err := s.db.SelectContext(ctx, &rows, selectRow); err != nil {
+		return 0, db.MapError(err)
+	}
+	rotated := 0
+	for _, r := range rows {
+		aad := []byte(r.ID.String() + r.Subscriber)
+		plain, err := box.OpenEmbedded(r.PayloadEnc, aad)
+		if err != nil {
+			return rotated, err
+		}
+		enc, err := box.SealEmbedded(plain, aad)
+		if err != nil {
+			return rotated, err
+		}
+		if _, err := s.db.ExecContext(ctx, s.db.Rebind(`UPDATE outbox SET payload_enc = ? WHERE id = ?`), enc, r.ID); err != nil {
+			return rotated, db.MapError(err)
+		}
+		rotated++
+	}
+	return rotated, nil
 }

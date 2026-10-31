@@ -396,6 +396,12 @@ function closeDrawer(el) {
   el.querySelector("#conn-add")?.removeAttribute("disabled");
   const empty = el.querySelector(".conn-empty");
   if (empty) empty.hidden = false;
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  if (params.has("edit")) {
+    params.delete("edit");
+    const qs = params.toString();
+    history.replaceState(null, "", "#/connections" + (qs ? "?" + qs : ""));
+  }
 }
 
 function testMailForm() {
@@ -588,6 +594,7 @@ export async function renderConnections(el) {
         if (hasSecret) body.secrets = secrets;
         await api("PATCH", "/connections/" + encodeURIComponent(btn.dataset.id), body);
         showOk("Connection updated");
+        history.replaceState(null, "", "#/connections?provider=" + encodeURIComponent(provider));
         await renderConnections(el);
       });
     });

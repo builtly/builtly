@@ -68,18 +68,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseUsersCursor(cursor string) (db.Time, uuid.UUID, error) {
-	if cursor == "" {
-		return db.Time{}, uuid.Nil, nil
-	}
-	parts := strings.SplitN(cursor, ",", 2)
-	if len(parts) != 2 {
-		return db.Time{}, uuid.Nil, errors.New("invalid cursor")
-	}
-	t, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil {
-		return db.Time{}, uuid.Nil, err
-	}
-	id, err := uuid.Parse(parts[1])
+	t, id, err := httpx.DecodeCursor(cursor)
 	if err != nil {
 		return db.Time{}, uuid.Nil, err
 	}
@@ -132,13 +121,22 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 			purchases = append(purchases, item)
 		}
 	}
+	identities := []any{}
+	if idents, err := h.users.ListIdentities(r.Context(), nil, appID, userID); err == nil {
+		identities = make([]any, 0, len(idents))
+		for _, id := range idents {
+			identities = append(identities, map[string]any{
+				"provider": id.Provider, "email": id.Email,
+			})
+		}
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"id": u.ID, "email": u.Email, "display_name": u.DisplayName,
 		"avatar_url": u.AvatarURL, "locale": u.Locale, "last_ip": u.LastIP,
 		"utm_source": attributionUTM(u.Attribution),
 		"status":     u.Status, "balance": bal.Balance, "created_at": u.CreatedAt,
 		"last_login_at": nullTime(u.LastLoginAt),
-		"identities":    []any{}, "purchases": purchases,
+		"identities":    identities, "purchases": purchases,
 	})
 }
 
@@ -171,6 +169,19 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid status"}))
 		return
 	}
+	curUser, err := h.users.GetByID(r.Context(), nil, appID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			httpx.WriteError(w, r, auth.ErrUserNotFound)
+			return
+		}
+		httpx.WriteError(w, r, err)
+		return
+	}
+	if curUser.Status == auth.StatusDeleted {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "deleted user cannot be modified"}))
+		return
+	}
 	now := db.Now()
 	if err := h.users.UpdateStatus(r.Context(), nil, appID, userID, body.Status, now); err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -194,8 +205,13 @@ func (h *Handler) userLedger(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	items, err := h.credits.ListLedger(r.Context(), appID, userID, limit)
+	limit := clampPageLimit(r.URL.Query().Get("limit"))
+	after, afterID, err := parseUsersCursor(r.URL.Query().Get("cursor"))
+	if err != nil {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid cursor"}))
+		return
+	}
+	items, err := h.credits.ListLedgerPaged(r.Context(), appID, userID, limit, after, afterID)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -210,7 +226,12 @@ func (h *Handler) userLedger(w http.ResponseWriter, r *http.Request) {
 			"created_at": e.CreatedAt,
 		})
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": out, "next_cursor": nil})
+	var nextCursor any
+	if len(items) == limit && limit > 0 {
+		last := items[len(items)-1]
+		nextCursor = keysetCursor(last.CreatedAt, last.ID)
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": out, "next_cursor": nextCursor})
 }
 
 func (h *Handler) adjustCredits(w http.ResponseWriter, r *http.Request) {
@@ -260,7 +281,7 @@ func (h *Handler) adjustCredits(w http.ResponseWriter, r *http.Request) {
 		Diff: MustJSON(RedactDiffMap(map[string]any{
 			"entry_type": body.EntryType, "amount": body.Amount, "reason": body.Reason,
 		})),
-		IP: httpx.ClientIP(r, nil), RequestID: r.Header.Get("X-Request-ID"), CreatedAt: db.Now(),
+		IP: httpx.ClientIP(r, h.trustedProxies), RequestID: r.Header.Get("X-Request-ID"), CreatedAt: db.Now(),
 	})
 	httpx.WriteJSON(w, http.StatusCreated, res.Entry)
 }
@@ -294,7 +315,7 @@ func (h *Handler) clearDebt(w http.ResponseWriter, r *http.Request) {
 		ID: auditID, Actor: "admin", Action: "credits.clear_debt", AppID: &appID,
 		TargetType: "user", TargetID: userID.String(),
 		Diff: MustJSON(map[string]any{"cleared": res.Cleared, "reason": body.Reason}),
-		IP:   httpx.ClientIP(r, nil), RequestID: r.Header.Get("X-Request-ID"), CreatedAt: db.Now(),
+		IP:   httpx.ClientIP(r, h.trustedProxies), RequestID: r.Header.Get("X-Request-ID"), CreatedAt: db.Now(),
 	})
 	status := http.StatusOK
 	if res.Cleared > 0 {

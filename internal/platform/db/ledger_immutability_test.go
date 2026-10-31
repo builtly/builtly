@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/platform/db/dbtest"
 )
 
@@ -19,13 +18,6 @@ func TestCreditLedgerAppendOnly(t *testing.T) {
 	}
 	for _, driver := range drivers {
 		t.Run(driver, func(t *testing.T) {
-			if driver == "postgres" {
-				probe, err := db.Open("postgres", postgresDSN(), 2)
-				if err != nil {
-					t.Skipf("postgres unavailable: %v", err)
-				}
-				_ = probe.Close()
-			}
 			database := dbtest.New(t, driver)
 			ctx := context.Background()
 

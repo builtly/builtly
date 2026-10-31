@@ -1,21 +1,50 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 
 	"github.com/builtly/builtly/internal/apperr"
 	"github.com/builtly/builtly/internal/auth"
 	"github.com/builtly/builtly/internal/credit"
+	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/principal"
 	"github.com/builtly/builtly/internal/tenant"
 )
 
 var featureRe = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
+
+// NewConsumeHook returns a credit.ConsumeHook that publishes credits.consumed when enabled on the app.
+func NewConsumeHook(tenants *tenant.Service, pub *outbox.Publisher) credit.ConsumeHook {
+	return func(ctx context.Context, tx *sqlx.Tx, entry credit.Entry, feature string) error {
+		if tenants == nil || pub == nil {
+			return nil
+		}
+		app, err := tenants.GetTx(ctx, tx, entry.AppID)
+		if err != nil || !app.Settings.Analytics.CaptureConsumeEvents {
+			return nil
+		}
+		payload, err := json.Marshal(map[string]any{
+			"user_id":         entry.UserID.String(),
+			"ledger_entry_id": entry.ID.String(),
+			"amount":          -entry.Amount,
+			"feature":         feature,
+		})
+		if err != nil {
+			return err
+		}
+		appID := entry.AppID
+		return pub.PublishTx(ctx, tx, outbox.Event{
+			AppID: &appID, Type: outbox.EventCreditsConsumed, Payload: payload,
+		})
+	}
+}
 
 // Handler serves POST /ai/consume.
 type Handler struct {
@@ -63,21 +92,32 @@ func (h *Handler) Consume(w http.ResponseWriter, r *http.Request) {
 
 	var userID uuid.UUID
 	if p.IsAPIKey {
+		if !p.HasScope("credits:consume") {
+			httpx.WriteError(w, r, apperr.Forbidden.WithDetails(map[string]any{"reason": "missing scope credits:consume"}))
+			return
+		}
 		if body.UserID == nil {
 			httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "user_id required with API key"}))
 			return
 		}
 		userID = *body.UserID
-		if _, err := h.users.GetByID(r.Context(), nil, app.ID, userID); err != nil {
-			httpx.WriteError(w, r, auth.ErrUserNotFound)
-			return
-		}
 	} else {
 		if body.UserID != nil {
 			httpx.WriteError(w, r, apperr.Forbidden.WithDetails(map[string]any{"reason": "user_id forbidden with user JWT"}))
 			return
 		}
 		userID = p.UserID
+	}
+	if h.users != nil {
+		u, err := h.users.GetByID(r.Context(), nil, app.ID, userID)
+		if err != nil || u.Status == auth.StatusDeleted {
+			httpx.WriteError(w, r, auth.ErrUserNotFound)
+			return
+		}
+		if u.Status == auth.StatusDisabled {
+			httpx.WriteError(w, r, auth.ErrAccountDisabled)
+			return
+		}
 	}
 
 	res, err := h.credits.Consume(r.Context(), app.ID, userID, body.Amount, idem, body.Feature, p.Actor, body.Metadata)

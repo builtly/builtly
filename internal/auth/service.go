@@ -178,7 +178,7 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			return err
 		}
 
-		payload, err := buildUserRegisteredPayload(app, emailAddr, verifyRaw, et.ExpiresAt.Time())
+		payload, err := buildUserRegisteredPayload(app, uid, emailAddr, verifyRaw, et.ExpiresAt.Time())
 		if err != nil {
 			return err
 		}
@@ -613,6 +613,9 @@ func (s *Service) DeleteMe(ctx context.Context, appID, userID uuid.UUID, passwor
 		if err := s.store.SoftDelete(ctx, tx, appID, userID, now); err != nil {
 			return err
 		}
+		if err := s.store.ConsumeAllEmailTokensForUser(ctx, tx, appID, userID, now); err != nil {
+			return err
+		}
 		if err := s.store.RevokeAllRefreshForUser(ctx, tx, appID, userID, now); err != nil {
 			return err
 		}
@@ -712,8 +715,9 @@ func actionURL(app tenant.App, path, token string) string {
 	return base + "/" + path + "?token=" + token
 }
 
-func buildUserRegisteredPayload(app tenant.App, to, verifyRaw string, expiry time.Time) (json.RawMessage, error) {
+func buildUserRegisteredPayload(app tenant.App, userID uuid.UUID, to, verifyRaw string, expiry time.Time) (json.RawMessage, error) {
 	p := email.Payload{
+		UserID:         userID.String(),
 		Template:       "verify_email",
 		To:             to,
 		ActionURL:      actionURL(app, "verify", verifyRaw),

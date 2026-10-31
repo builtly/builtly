@@ -15,6 +15,7 @@ import (
 
 // Payload is the sealed JSON for email.requested / user.registered email fan-out.
 type Payload struct {
+	UserID         string         `json:"user_id,omitempty"`
 	Template       string         `json:"template,omitempty"` // built-in name: verify_email | reset_password | email_changed
 	TemplateKey    string         `json:"template_key,omitempty"`
 	Trigger        string         `json:"trigger,omitempty"`

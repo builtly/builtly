@@ -230,8 +230,11 @@ func (s *Service) commitIAP(ctx context.Context, appID, userID uuid.UUID, produc
 		balance = res.Balance
 		appCopy := appID
 		payload, _ := json.Marshal(map[string]any{
-			"purchase_id": purchaseID.String(), "user_id": userID.String(),
-			"product_id": product.ID.String(), "credits": product.Credits, "provider": provider,
+			"purchase_id": p.ID.String(), "user_id": userID.String(),
+			"product_id": product.ID.String(), "product_sku": product.SKU,
+			"credits": product.Credits, "provider": provider,
+			"amount": product.PriceAmount, "currency": product.Currency,
+			"environment": env,
 		})
 		return s.outbox.PublishTx(ctx, tx, outbox.Event{
 			AppID: &appCopy, Type: outbox.EventPurchaseCompleted, Payload: payload,

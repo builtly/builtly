@@ -166,7 +166,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 		slog.Warn("oauth app load failed", "provider", providerName, "app_id", flow.AppID, "err", err)
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
-	user, isNew, err := s.resolveIdentity(ctx, app, ident, flow.Attribution, flow.ReferralCode)
+	user, isNew, refRes, err := s.resolveIdentity(ctx, app, ident, flow.Attribution, flow.ReferralCode)
 	if err != nil {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
 		if errors.Is(err, ErrAccountDisabled) {
@@ -178,16 +178,24 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 		slog.Warn("oauth resolve identity failed", "provider", providerName, "app_id", flow.AppID, "err", err)
 		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
 	}
-	_ = isNew
 
 	loginRaw, loginHash, err := newOpaqueToken("lc_")
 	if err != nil {
 		return "", err
 	}
-	if err := s.store.AuthenticateOAuthFlow(ctx, nil, flow.ID, user.ID, loginHash, db.Now()); err != nil {
+	outcomeJSON, _ := json.Marshal(oauthFlowOutcome{
+		IsNewUser: isNew,
+		Referral:  refRes,
+	})
+	if err := s.store.AuthenticateOAuthFlow(ctx, nil, flow.ID, user.ID, loginHash, outcomeJSON, db.Now()); err != nil {
 		return "", err
 	}
 	return oauthCodeRedirect(flow.RedirectURI, loginRaw), nil
+}
+
+type oauthFlowOutcome struct {
+	IsNewUser bool                  `json:"_is_new_user"`
+	Referral  *ReferralSignupResult `json:"_referral,omitempty"`
 }
 
 // ExchangeLoginCode verifies client PKCE and issues a session.
@@ -218,11 +226,18 @@ func (s *Service) ExchangeLoginCode(ctx context.Context, app tenant.App, loginCo
 	if err != nil || u.Status != StatusActive {
 		return TokenResponse{}, ErrInvalidToken
 	}
+	var outcome oauthFlowOutcome
+	_ = json.Unmarshal(flow.Attribution, &outcome)
 	method := flow.Provider
 	if method == provider.GitHub {
 		method = MethodGitHub
 	}
-	return s.issueSession(ctx, app, u, method, ua, ip, false)
+	resp, err := s.issueSession(ctx, app, u, method, ua, ip, outcome.IsNewUser)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	resp.Referral = outcome.Referral
+	return resp, nil
 }
 
 // NativeApple handles POST /auth/apple.
@@ -253,15 +268,22 @@ func (s *Service) NativeApple(ctx context.Context, app tenant.App, identityToken
 		ident.Name = fullName
 	}
 	if authCode != "" {
-		if rt, err := exchangeAppleNative(ctx, s, cfg, authCode); err == nil {
+		if rt, err := exchangeAppleNative(ctx, s, cfg, authCode, ident.Audience); err == nil {
 			ident.RefreshToken = rt
+		} else {
+			slog.Warn("apple native token exchange failed", "app_id", app.ID, "err", err)
 		}
 	}
-	user, isNew, err := s.resolveIdentity(ctx, app, ident, attribution, strPtr(referral))
+	user, isNew, refRes, err := s.resolveIdentity(ctx, app, ident, attribution, strPtr(referral))
 	if err != nil {
 		return TokenResponse{}, err
 	}
-	return s.issueSession(ctx, app, user, MethodApple, ua, ip, isNew)
+	resp, err := s.issueSession(ctx, app, user, MethodApple, ua, ip, isNew)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	resp.Referral = refRes
+	return resp, nil
 }
 
 // NativeGoogle handles POST /auth/google.
@@ -285,16 +307,21 @@ func (s *Service) NativeGoogle(ctx context.Context, app tenant.App, idToken, raw
 	if err != nil {
 		return TokenResponse{}, ErrInvalidToken
 	}
-	user, isNew, err := s.resolveIdentity(ctx, app, ident, attribution, strPtr(referral))
+	user, isNew, refRes, err := s.resolveIdentity(ctx, app, ident, attribution, strPtr(referral))
 	if err != nil {
 		return TokenResponse{}, err
 	}
-	return s.issueSession(ctx, app, user, MethodGoogle, ua, ip, isNew)
+	resp, err := s.issueSession(ctx, app, user, MethodGoogle, ua, ip, isNew)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	resp.Referral = refRes
+	return resp, nil
 }
 
-func exchangeAppleNative(ctx context.Context, s *Service, cfg provider.Config, code string) (string, error) {
-	bundleID := ""
-	if len(cfg.BundleIDs) > 0 {
+func exchangeAppleNative(ctx context.Context, s *Service, cfg provider.Config, code, matchedAud string) (string, error) {
+	bundleID := matchedAud
+	if bundleID == "" && len(cfg.BundleIDs) > 0 {
 		bundleID = cfg.BundleIDs[0]
 	}
 	type exchanger interface {
@@ -306,9 +333,10 @@ func exchangeAppleNative(ctx context.Context, s *Service, cfg provider.Config, c
 	return "", fmt.Errorf("unsupported")
 }
 
-func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident provider.Identity, attribution json.RawMessage, referralCode *string) (User, bool, error) {
+func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident provider.Identity, attribution json.RawMessage, referralCode *string) (User, bool, *ReferralSignupResult, error) {
 	var out User
 	var isNew bool
+	var refRes *ReferralSignupResult
 	err := s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		now := db.Now()
 		existing, err := s.store.GetIdentityBySubject(ctx, tx, app.ID, ident.Provider, ident.Subject)
@@ -340,6 +368,9 @@ func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident pro
 		emailNorm := strings.ToLower(ident.Email)
 		u, err := s.store.GetByEmail(ctx, tx, app.ID, emailNorm)
 		if err == nil {
+			if u.Status == StatusDeleted || u.Status == StatusDisabled {
+				return ErrAccountDisabled
+			}
 			if !u.EmailVerifiedAt.Valid {
 				if err := s.store.TakeoverUnverifiedPassword(ctx, tx, app.ID, u.ID, now); err != nil {
 					return err
@@ -394,6 +425,7 @@ func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident pro
 			return err
 		}
 		payload, _ := json.Marshal(map[string]any{
+			"user_id":         uid.String(),
 			"password_signup": false,
 			"to":              emailNorm,
 			"provider":        ident.Provider,
@@ -406,13 +438,17 @@ func (s *Service) resolveIdentity(ctx context.Context, app tenant.App, ident pro
 			return err
 		}
 		if referralCode != nil && *referralCode != "" && s.referrals != nil {
-			_, _ = s.referrals.ApplyTx(ctx, tx, app, uid, *referralCode)
+			ar, err := s.referrals.ApplyTx(ctx, tx, app, uid, *referralCode)
+			if err != nil {
+				return err
+			}
+			refRes = &ReferralSignupResult{Applied: ar.Applied, Reason: ar.Reason}
 		}
 		out = u
 		isNew = true
 		return nil
 	})
-	return out, isNew, err
+	return out, isNew, refRes, err
 }
 
 func (s *Service) linkIdentity(ctx context.Context, tx *sqlx.Tx, appID, userID uuid.UUID, ident provider.Identity, now db.Time) error {

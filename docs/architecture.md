@@ -1659,6 +1659,7 @@ Standard library first (`net/http`, `log/slog`, `encoding/json`, `crypto/*`, `da
 | `github.com/jmoiron/sqlx` | Struct scanning, `Rebind` |
 | `github.com/jackc/pgx/v5` (`stdlib`) | PostgreSQL driver |
 | `modernc.org/sqlite` | Pure-Go SQLite |
+| `github.com/tursodatabase/libsql-client-go` | Remote SQLite / Turso driver for cloud deployment |
 | `github.com/golang-jwt/jwt/v5` | JWT (HS256 issue; RS256/ES256 verify) |
 | `github.com/google/uuid` | UUIDv7 |
 | `golang.org/x/crypto` | argon2id |
@@ -1714,7 +1715,7 @@ All process configuration is read once into a validated `config.Config` (no `os.
 | `BUILTLY_ENV` | `development` | `development` \| `production`; production forbids `http://localhost` redirect URLs and text log format |
 | `BUILTLY_HTTP_ADDR` | `:8080` | |
 | `BUILTLY_PUBLIC_URL` | required in prod | OAuth callback + webhook URLs |
-| `BUILTLY_DB_DRIVER` / `BUILTLY_DB_DSN` | `sqlite` / `file:builtly.db` | |
+| `BUILTLY_DB_DRIVER` / `BUILTLY_DB_DSN` | `sqlite` / `file:builtly.db` | `postgres` \| `sqlite` \| `libsql` |
 | `BUILTLY_DB_MAX_OPEN_CONNS` | `20` | ignored for SQLite |
 | `BUILTLY_AUTO_MIGRATE` | `false` | |
 | `BUILTLY_JWT_SIGNING_KEYS` | required | `kid:base64,…`; first active; ≥ 32 bytes each |

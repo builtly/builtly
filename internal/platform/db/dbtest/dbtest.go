@@ -34,12 +34,7 @@ func New(t *testing.T, driver string) *db.DB {
 		t.Fatalf("dbtest: unsupported driver %q", driver)
 	}
 
-	// Postgres: single connection so advisory lock, DROP SCHEMA, and MigrateUp
-	// share one session (pool>1 can race within the same test handle).
 	maxOpen := 5
-	if driver == "postgres" {
-		maxOpen = 1
-	}
 	database, err := db.Open(driver, dsn, maxOpen)
 	if err != nil {
 		t.Fatalf("dbtest: open %s: %v", driver, err)
@@ -47,15 +42,22 @@ func New(t *testing.T, driver string) *db.DB {
 
 	ctx := context.Background()
 	if driver == "postgres" {
-		if _, err := database.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, postgresTestLockKey); err != nil {
+		lockConn, err := database.DB.Conn(ctx)
+		if err != nil {
+			_ = database.Close()
+			t.Fatalf("dbtest: lock conn: %v", err)
+		}
+		if _, err := lockConn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, postgresTestLockKey); err != nil {
+			_ = lockConn.Close()
 			_ = database.Close()
 			t.Fatalf("dbtest: advisory lock: %v", err)
 		}
 		t.Cleanup(func() {
-			_, _ = database.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, postgresTestLockKey)
+			_, _ = lockConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, postgresTestLockKey)
+			_ = lockConn.Close()
 			_ = database.Close()
 		})
-		if _, err := database.ExecContext(ctx, `
+		if _, err := lockConn.ExecContext(ctx, `
 			DROP SCHEMA public CASCADE;
 			CREATE SCHEMA public;
 			GRANT ALL ON SCHEMA public TO public;

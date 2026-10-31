@@ -92,7 +92,7 @@ func DefaultSettings() Settings {
 	}
 }
 
-// MergeSettings overlays non-empty fields from overlay onto base (shallow for slices / nested by presence of keys in JSON).
+// MergeSettings overlays non-empty fields from overlay onto base (for Go struct callers).
 func MergeSettings(base Settings, overlay Settings) (Settings, error) {
 	baseJSON, err := json.Marshal(base)
 	if err != nil {
@@ -144,19 +144,44 @@ func MergeSettings(base Settings, overlay Settings) (Settings, error) {
 	if err := json.Unmarshal(outJSON, &out); err != nil {
 		return Settings{}, err
 	}
-	return out, nil
+	return normalizeSettings(out), nil
+}
+
+// MergeSettingsJSON overlays raw JSON keys onto base, preserving explicit false/0/empty values.
+func MergeSettingsJSON(base Settings, raw []byte) (Settings, error) {
+	out := base
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" || trimmed == "{}" {
+		return normalizeSettings(out), nil
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return Settings{}, fmt.Errorf("tenant: settings: %w", err)
+	}
+	return normalizeSettings(out), nil
+}
+
+func normalizeSettings(s Settings) Settings {
+	if s.AllowedOrigins == nil {
+		s.AllowedOrigins = []string{}
+	}
+	if s.AuthRedirectURLs == nil {
+		s.AuthRedirectURLs = []string{}
+	}
+	if s.Auth.Providers == nil {
+		s.Auth.Providers = []string{}
+	}
+	if s.Storage.AllowedContentTypes == nil {
+		s.Storage.AllowedContentTypes = []string{}
+	}
+	if s.Affiliate.Provider == "" {
+		s.Affiliate.Provider = "none"
+	}
+	return s
 }
 
 // ParseSettings unmarshals JSON with defaults applied for missing fields.
 func ParseSettings(raw []byte) (Settings, error) {
-	if len(raw) == 0 || string(raw) == "null" || string(raw) == "{}" {
-		return DefaultSettings(), nil
-	}
-	var overlay Settings
-	if err := json.Unmarshal(raw, &overlay); err != nil {
-		return Settings{}, fmt.Errorf("tenant: settings: %w", err)
-	}
-	s, err := MergeSettings(DefaultSettings(), overlay)
+	s, err := MergeSettingsJSON(DefaultSettings(), raw)
 	if err != nil {
 		return Settings{}, err
 	}

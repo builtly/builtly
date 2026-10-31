@@ -75,9 +75,10 @@ function decodeUsersCursor(c) {
   return !c || c === USERS_FIRST ? "" : c;
 }
 
-function usersHash(appID, { q = "", cursor = "", trail = [] } = {}) {
+function usersHash(appID, { q = "", status = "", cursor = "", trail = [] } = {}) {
   const p = new URLSearchParams();
   if (q) p.set("q", q);
+  if (status) p.set("status", status);
   if (cursor) p.set("cursor", cursor);
   if (trail.length) p.set("trail", trail.map(encodeUsersCursor).join("|"));
   const qs = p.toString();
@@ -92,6 +93,7 @@ function parseTrail(raw) {
 export async function renderUsers(el, appID) {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const q = params.get("q") || "";
+  const status = params.get("status") || "";
   const cursor = params.get("cursor") || "";
   const trail = parseTrail(params.get("trail") || "");
   const page = trail.length + 1;
@@ -100,6 +102,7 @@ export async function renderUsers(el, appID) {
   el.innerHTML = `<div class="page-head"><h1>Users</h1><p class="muted">Loading…</p></div>`;
   const qs = new URLSearchParams({ limit: String(pageSize) });
   if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
   if (cursor) qs.set("cursor", cursor);
   const data = await api("GET", "/apps/" + encodeURIComponent(appID) + "/users?" + qs.toString());
   const items = data.items || [];
@@ -143,6 +146,14 @@ export async function renderUsers(el, appID) {
       <label class="user-search__label" for="user-q">Find</label>
       <div class="toolbar-fields">
         <input id="user-q" name="q" value="${esc(q)}" placeholder="email or user id" autocomplete="off">
+        <div class="field field--choice">
+          <select id="user-status" name="status" aria-label="Status">
+            <option value="">Any status</option>
+            <option value="active"${status === "active" ? " selected" : ""}>active</option>
+            <option value="disabled"${status === "disabled" ? " selected" : ""}>disabled</option>
+            <option value="deleted"${status === "deleted" ? " selected" : ""}>deleted</option>
+          </select>
+        </div>
       </div>
       <button type="submit">Filter</button>
     </form>
@@ -169,22 +180,26 @@ export async function renderUsers(el, appID) {
       <button type="button" class="user-pager__btn" id="user-next" ${nextCursor ? "" : "disabled"}>Next</button>
     </nav>`;
 
+  wireMobileSelect(el.querySelector("#user-status"), { title: "Status" });
+
   el.querySelector("#search").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    const qq = new FormData(ev.target).get("q");
+    const fd = new FormData(ev.target);
+    const qq = fd.get("q");
+    const st = fd.get("status");
     // hashchange → route() re-renders; do not call renderUsers here (double fetch).
-    location.hash = usersHash(appID, { q: String(qq || "") });
+    location.hash = usersHash(appID, { q: String(qq || ""), status: String(st || "") });
   });
 
   el.querySelector("#user-prev").addEventListener("click", () => {
     if (!trail.length) return;
     const prev = trail[trail.length - 1] || "";
-    location.hash = usersHash(appID, { q, cursor: prev, trail: trail.slice(0, -1) });
+    location.hash = usersHash(appID, { q, status, cursor: prev, trail: trail.slice(0, -1) });
   });
 
   el.querySelector("#user-next").addEventListener("click", () => {
     if (!nextCursor) return;
-    location.hash = usersHash(appID, { q, cursor: nextCursor, trail: [...trail, cursor] });
+    location.hash = usersHash(appID, { q, status, cursor: nextCursor, trail: [...trail, cursor] });
   });
 
   wireAvatarFallbacks(el);
@@ -206,9 +221,28 @@ export async function renderUserDetail(el, appID, userID) {
       <td>${esc(e.reason || "")}</td>
     </tr>`).join("") || `<tr><td colspan="6" class="empty user-empty-row">No ledger entries.</td></tr>`;
 
+  const toggleStatusBtn = user.status !== "deleted"
+    ? `<button type="button" class="secondary" id="toggle-status">
+        ${user.status === "disabled" ? "Enable account" : "Disable account"}
+      </button>`
+    : "";
   const clearDebtBtn = user.balance < 0
     ? `<button type="button" class="danger" id="clear-debt">Clear debt</button>`
     : "";
+
+  const identitiesLabel = (user.identities || [])
+    .map((id) => id.email ? `${id.provider} (${id.email})` : id.provider)
+    .join(", ");
+
+  const purchaseRows = (user.purchases || []).map((p, i) => `
+    <tr class="user-ledger-row" data-reveal="${i}">
+      <td class="user-when">${esc(fmtTime(p.created_at))}</td>
+      <td>${esc(p.provider)}</td>
+      <td>${statusChip(p.status)}</td>
+      <td class="user-balance">${esc(p.credits)}</td>
+      <td class="user-balance">${esc(p.refunded_credits)}</td>
+      <td class="mono">${esc(p.environment || "—")}</td>
+    </tr>`).join("");
 
   const title = user.display_name || user.email || user.id;
   const subtitle = user.email && user.display_name ? user.email : user.id;
@@ -230,9 +264,7 @@ export async function renderUserDetail(el, appID, userID) {
         <h1 class="user-dossier__title">${esc(title)}</h1>
         <p class="user-dossier__sub">${esc(subtitle)}</p>
         <div class="user-dossier__actions">
-          <button type="button" class="secondary" id="toggle-status">
-            ${user.status === "disabled" ? "Enable account" : "Disable account"}
-          </button>
+          ${toggleStatusBtn}
           ${clearDebtBtn}
         </div>
       </div>
@@ -247,6 +279,10 @@ export async function renderUserDetail(el, appID, userID) {
       <div class="user-meta user-meta--wide">
         <span class="user-meta__k">User ID</span>
         <span class="user-meta__v user-meta__v--id">${esc(user.id)}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-meta__k">Identities</span>
+        <span class="user-meta__v">${esc(identitiesLabel || "—")}</span>
       </div>
       <div class="user-meta">
         <span class="user-meta__k">Locale</span>
@@ -292,6 +328,20 @@ export async function renderUserDetail(el, appID, userID) {
       </form>
     </article>
 
+    ${purchaseRows ? `
+    <div class="user-ledger-head">
+      <h2>Recent purchases</h2>
+      <div class="user-ledger-links" aria-label="All purchases">
+        <a class="user-ledger-link" href="#/apps/${esc(appID)}/activity?user_id=${esc(userID)}">All purchases</a>
+      </div>
+    </div>
+    <div class="table-wrap user-ledger-wrap">
+      <table class="user-ledger">
+        <thead><tr><th>When</th><th>Provider</th><th>Status</th><th>Credits</th><th>Refunded</th><th>Env</th></tr></thead>
+        <tbody>${purchaseRows}</tbody>
+      </table>
+    </div>` : ""}
+
     <div class="user-ledger-head">
       <h2>Ledger</h2>
       <div class="user-ledger-links" aria-label="Related activity">
@@ -306,13 +356,16 @@ export async function renderUserDetail(el, appID, userID) {
     </table>
     </div>`;
 
-  el.querySelector("#toggle-status").addEventListener("click", async () => {
-    const status = user.status === "disabled" ? "active" : "disabled";
-    if (status === "disabled" && !confirm("Disable this user? Refresh tokens will be revoked.")) return;
-    await api("PATCH", base, { status });
-    showOk("User " + status);
-    await renderUserDetail(el, appID, userID);
-  });
+  const toggleBtn = el.querySelector("#toggle-status");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", async () => {
+      const status = user.status === "disabled" ? "active" : "disabled";
+      if (status === "disabled" && !confirm("Disable this user? Refresh tokens will be revoked.")) return;
+      await api("PATCH", base, { status });
+      showOk("User " + status);
+      await renderUserDetail(el, appID, userID);
+    });
+  }
 
   const clearBtn = el.querySelector("#clear-debt");
   if (clearBtn) {

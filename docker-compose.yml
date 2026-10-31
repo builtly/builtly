@@ -8,7 +8,7 @@ services:
       BUILTLY_DATA_DIR: /data
       BUILTLY_LOG_FORMAT: text
       BUILTLY_LOG_LEVEL: info
-      BUILTLY_WORKERS_ENABLED: "false"
+      BUILTLY_WORKERS_ENABLED: "true"
       BUILTLY_SETUP_TOKEN: local-setup-token-change-me-please-32b
     volumes:
       - builtly-data:/data

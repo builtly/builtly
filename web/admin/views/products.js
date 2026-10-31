@@ -81,6 +81,11 @@ function productBody(fd, { includeActive }) {
   };
   if (includeActive) body.active = fd.get("active") === "true";
   else body.active = true;
+  const sortRaw = String(fd.get("sort_order") ?? "").trim();
+  if (sortRaw !== "") {
+    const sortNum = Number(sortRaw);
+    if (Number.isFinite(sortNum)) body.sort_order = Math.trunc(sortNum);
+  }
   for (const k of ["stripe_price_id", "apple_product_id", "google_product_id"]) {
     const v = String(fd.get(k) || "").trim();
     if (includeActive) body[k] = v || null;
@@ -198,6 +203,9 @@ export async function renderProducts(el, appID) {
           <div class="form-row">
             <div class="field field--full"><label>Google product ID <span class="muted">(optional)</span></label><input name="google_product_id" autocomplete="off"></div>
           </div>
+          <div class="form-row">
+            <div class="field"><label>Sort order <span class="muted">(optional)</span></label><input name="sort_order" type="number" step="1" value="0" autocomplete="off"></div>
+          </div>
           <div class="form-row" id="prod-active-row" hidden>
             <div class="field field--status"><label>Active</label>
               <select name="active" id="prod-active">
@@ -264,11 +272,13 @@ export async function renderProducts(el, appID) {
       f("stripe_price_id").value = product.stripe_price_id || "";
       f("apple_product_id").value = product.apple_product_id || "";
       f("google_product_id").value = product.google_product_id || "";
+      f("sort_order").value = product.sort_order != null ? String(product.sort_order) : "0";
       f("active").value = product.active ? "true" : "false";
       f("active").dispatchEvent(new Event("change", { bubbles: true }));
     } else {
       titleEl.textContent = "Add product";
       submitBtn.textContent = "Create";
+      f("sort_order").value = "0";
       activeRow.hidden = true;
       f("price_major").value = "";
     }
