@@ -1353,6 +1353,7 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 | GET | `/api/v1/admin/outbox` · POST `/api/v1/admin/outbox/{id}/retry` | | |
 | GET | `/api/v1/admin/audit-log` | | |
 | **Auth** | | | 4.3 |
+| GET | `/api/v1/auth/config` | tenant | |
 | POST | `/api/v1/auth/register` · `/login` · `/refresh` · `/logout` | tenant | |
 | POST | `/api/v1/auth/email/verify/request` | user | |
 | POST | `/api/v1/email/send` | user | |

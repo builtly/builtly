@@ -161,6 +161,7 @@ func (s *Server) buildRouter() chi.Router {
 				}
 
 				if s.deps.Auth != nil {
+					pub.Get("/auth/config", s.deps.Auth.PublicConfig)
 					pub.Post("/auth/register", s.deps.Auth.Register)
 					pub.Post("/auth/login", s.deps.Auth.Login)
 					pub.Post("/auth/refresh", s.deps.Auth.Refresh)

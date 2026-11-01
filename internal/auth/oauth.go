@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -37,6 +38,56 @@ type OAuthDeps struct {
 
 // SetOAuth wires social auth dependencies.
 func (s *Service) SetOAuth(d OAuthDeps) { s.oauth = d }
+
+// PublicConfig returns client-safe authentication and app configuration.
+func (s *Service) PublicConfig(ctx context.Context, app tenant.App) (PublicConfig, error) {
+	providers := make(map[string]PublicOAuthConfig)
+	allProviders := []string{provider.Google, provider.GitHub, provider.Apple}
+	for _, p := range allProviders {
+		enabled := slices.Contains(app.Settings.Auth.Providers, p)
+		var clientID string
+		if enabled && s.oauth.Resolver != nil {
+			integName := provider.IntegrationProvider(p)
+			if resolved, err := s.oauth.Resolver.For(ctx, app.ID, integName); err == nil {
+				if cfg, err := provider.ParseConfig(integName, resolved.Settings, resolved.Secrets); err == nil {
+					switch p {
+					case provider.Google, provider.GitHub:
+						clientID = cfg.ClientID
+					case provider.Apple:
+						clientID = cfg.ServicesID
+						if clientID == "" && len(cfg.BundleIDs) > 0 {
+							clientID = cfg.BundleIDs[0]
+						}
+					}
+				}
+			}
+		}
+		providers[p] = PublicOAuthConfig{
+			Enabled:  enabled,
+			ClientID: clientID,
+		}
+	}
+
+	return PublicConfig{
+		AppID: app.ID,
+		Slug:  app.Slug,
+		Name:  app.Name,
+		Auth: PublicAuthConfig{
+			PasswordEnabled:          app.Settings.Auth.PasswordEnabled,
+			RequireEmailVerification: app.Settings.Auth.RequireEmailVerification,
+			Providers:                providers,
+		},
+		SignupBonusCredits: app.Settings.SignupBonusCredits,
+		Storage: PublicStorageConfig{
+			MaxFileBytes:        app.Settings.Storage.MaxFileBytes,
+			AllowedContentTypes: app.Settings.Storage.AllowedContentTypes,
+		},
+		Referral: PublicReferralConfig{
+			Enabled:             app.Settings.Referral.Enabled,
+			RefereeBonusCredits: app.Settings.Referral.RefereeBonusCredits,
+		},
+	}, nil
+}
 
 // StartOAuth validates input and returns the provider authorize URL.
 func (s *Service) StartOAuth(ctx context.Context, providerName string, appID uuid.UUID, redirectURI, codeChallenge, codeChallengeMethod string, attribution json.RawMessage, referralCode string) (authorizeURL string, err error) {

@@ -182,3 +182,35 @@ func toPublicUser(u User) PublicUser {
 		CreatedAt:     u.CreatedAt,
 	}
 }
+
+// PublicConfig is the client-facing app/auth configuration returned by GET /api/v1/auth/config.
+type PublicConfig struct {
+	AppID              uuid.UUID            `json:"app_id"`
+	Slug               string               `json:"slug"`
+	Name               string               `json:"name"`
+	Auth               PublicAuthConfig     `json:"auth"`
+	SignupBonusCredits int64                `json:"signup_bonus_credits"`
+	Storage            PublicStorageConfig  `json:"storage"`
+	Referral           PublicReferralConfig `json:"referral"`
+}
+
+type PublicAuthConfig struct {
+	PasswordEnabled          bool                         `json:"password_enabled"`
+	RequireEmailVerification bool                         `json:"require_email_verification"`
+	Providers                map[string]PublicOAuthConfig `json:"providers"`
+}
+
+type PublicOAuthConfig struct {
+	Enabled  bool   `json:"enabled"`
+	ClientID string `json:"client_id,omitempty"`
+}
+
+type PublicStorageConfig struct {
+	MaxFileBytes        int64    `json:"max_file_bytes"`
+	AllowedContentTypes []string `json:"allowed_content_types"`
+}
+
+type PublicReferralConfig struct {
+	Enabled             bool  `json:"enabled"`
+	RefereeBonusCredits int64 `json:"referee_bonus_credits"`
+}

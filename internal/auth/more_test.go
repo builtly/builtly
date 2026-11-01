@@ -174,4 +174,23 @@ func TestGoogleNativeHTTP(t *testing.T) {
 	if rrNonce.Code != 200 {
 		t.Fatalf("native google onetap nonce: %d %s", rrNonce.Code, rrNonce.Body.String())
 	}
+
+	// Test GET /api/v1/auth/config
+	reqCfg := httptest.NewRequest("GET", "/api/v1/auth/config", nil)
+	reqCfg.Header.Set("X-App-ID", app.ID.String())
+	rrCfg := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rrCfg, reqCfg)
+	if rrCfg.Code != 200 {
+		t.Fatalf("auth config: %d %s", rrCfg.Code, rrCfg.Body.String())
+	}
+	var pubCfg auth.PublicConfig
+	if err := json.Unmarshal(rrCfg.Body.Bytes(), &pubCfg); err != nil {
+		t.Fatal(err)
+	}
+	if !pubCfg.Auth.PasswordEnabled {
+		t.Errorf("expected password_enabled true")
+	}
+	if g, ok := pubCfg.Auth.Providers["google"]; !ok || !g.Enabled || g.ClientID != "web" {
+		t.Errorf("unexpected google config: %+v", g)
+	}
 }

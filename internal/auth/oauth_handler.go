@@ -160,6 +160,21 @@ func (h *Handler) GoogleNative(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// PublicConfig handles GET /auth/config.
+func (h *Handler) PublicConfig(w http.ResponseWriter, r *http.Request) {
+	app, ok := tenant.FromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	cfg, err := h.svc.PublicConfig(r.Context(), app)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, cfg)
+}
+
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if v != "" {
