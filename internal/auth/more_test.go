@@ -162,4 +162,16 @@ func TestGoogleNativeHTTP(t *testing.T) {
 	if rr.Code != 200 {
 		t.Fatalf("native google: %d %s", rr.Code, rr.Body.String())
 	}
+
+	// Google One Tap sets nonce: "not_provided" when omitted by client.
+	sNonce := signGoogleWithNonce(t, rsaKey, "native", "sub-onetap", "onetap@ex.com", true, "not_provided")
+	bodyNonce, _ := json.Marshal(map[string]any{"id_token": sNonce})
+	reqNonce := httptest.NewRequest("POST", "/api/v1/auth/google", strings.NewReader(string(bodyNonce)))
+	reqNonce.Header.Set("Content-Type", "application/json")
+	reqNonce.Header.Set("X-App-ID", app.ID.String())
+	rrNonce := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rrNonce, reqNonce)
+	if rrNonce.Code != 200 {
+		t.Fatalf("native google onetap nonce: %d %s", rrNonce.Code, rrNonce.Body.String())
+	}
 }

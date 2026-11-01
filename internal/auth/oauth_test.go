@@ -294,12 +294,20 @@ func mustQuery(t *testing.T, raw, key string) string {
 }
 
 func signGoogle(t *testing.T, key *rsa.PrivateKey, aud, sub, email string, verified bool) string {
+	return signGoogleWithNonce(t, key, aud, sub, email, verified, "")
+}
+
+func signGoogleWithNonce(t *testing.T, key *rsa.PrivateKey, aud, sub, email string, verified bool, nonce string) string {
 	t.Helper()
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+	claims := jwt.MapClaims{
 		"iss": "https://accounts.google.com", "sub": sub, "aud": aud,
 		"email": email, "email_verified": verified,
 		"iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix(),
-	})
+	}
+	if nonce != "" {
+		claims["nonce"] = nonce
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	tok.Header["kid"] = "test"
 	s, err := tok.SignedString(key)
 	if err != nil {

@@ -305,6 +305,7 @@ func (s *Service) NativeGoogle(ctx context.Context, app tenant.App, idToken, raw
 	nonce := rawNonce
 	ident, err := s.oauth.Providers.Native.Google.VerifyIDToken(ctx, cfg, idToken, nonce)
 	if err != nil {
+		slog.Warn("google native token verify failed", "err", err, "cfg_client_id", cfg.ClientID, "natives", cfg.NativeClientIDs)
 		return TokenResponse{}, ErrInvalidToken
 	}
 	user, isNew, refRes, err := s.resolveIdentity(ctx, app, ident, attribution, strPtr(referral))

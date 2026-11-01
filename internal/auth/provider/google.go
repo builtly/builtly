@@ -83,7 +83,7 @@ func (g *googleProvider) verify(ctx context.Context, cfg Config, idToken, nonce 
 		jwt.WithLeeway(30*time.Second),
 	)
 	if err != nil {
-		return Identity{}, err
+		return Identity{}, fmt.Errorf("google jwks: %w", err)
 	}
 	claims, ok := tok.Claims.(jwt.MapClaims)
 	if !ok {
@@ -91,7 +91,7 @@ func (g *googleProvider) verify(ctx context.Context, cfg Config, idToken, nonce 
 	}
 	iss, _ := claims["iss"].(string)
 	if iss != "accounts.google.com" && iss != "https://accounts.google.com" {
-		return Identity{}, fmt.Errorf("google: bad iss")
+		return Identity{}, fmt.Errorf("google: bad iss %q", iss)
 	}
 	audOK := false
 	switch a := claims["aud"].(type) {
@@ -106,13 +106,15 @@ func (g *googleProvider) verify(ctx context.Context, cfg Config, idToken, nonce 
 		}
 	}
 	if !audOK {
-		return Identity{}, fmt.Errorf("google: bad aud")
+		return Identity{}, fmt.Errorf("google: bad aud %v (allowed: %v)", claims["aud"], audiences)
 	}
 	claimNonce, _ := claims["nonce"].(string)
-	if nonce != "" || claimNonce != "" {
+	if nonce != "" {
 		if claimNonce != nonce {
-			return Identity{}, fmt.Errorf("google: nonce mismatch")
+			return Identity{}, fmt.Errorf("google: nonce mismatch (token: %q, sent: %q)", claimNonce, nonce)
 		}
+	} else if claimNonce != "" && claimNonce != "not_provided" {
+		return Identity{}, fmt.Errorf("google: nonce mismatch (token: %q, sent: %q)", claimNonce, nonce)
 	}
 	sub, _ := claims["sub"].(string)
 	email, _ := claims["email"].(string)
