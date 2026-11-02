@@ -2574,7 +2574,7 @@ button[data-danger] {
   margin: 0 0 1.5rem;
 }
 
-.ig-actions button[type="submit"] {
+.ig-actions button {
   margin: 0;
   border: 1.5px solid var(--user-ink);
   border-radius: 0.1rem;
@@ -2587,10 +2587,345 @@ button[data-danger] {
   text-transform: uppercase;
   padding: 0.5rem 0.95rem;
   box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  cursor: pointer;
   --pico-background-color: var(--user-ink);
   --pico-border-color: var(--user-ink);
   --pico-color: #f3f1eb;
   --pico-border-radius: 0.1rem;
+}
+
+.ig-actions button:hover {
+  background: #2a3142;
+  border-color: #2a3142;
+  --pico-background-color: #2a3142;
+  --pico-border-color: #2a3142;
+}
+
+.ig-advanced .ig-actions {
+  margin: 0.75rem 0 0;
+}
+
+/* Overview — App settings button */
+.ov-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ov-head-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  white-space: nowrap;
+}
+
+.ov-head-btn:hover {
+  background: #2a3142;
+  border-color: #2a3142;
+  color: #fff;
+}
+
+/* Dedicated App Settings page */
+.settings-form {
+  margin-top: 1rem;
+}
+
+.settings-card {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.15rem 1.15rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.15rem;
+  background: #faf9f6;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.05);
+}
+
+.settings-card__title {
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.45rem;
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--user-ink);
+  border-bottom: 1.5px solid var(--user-rule, #d4d0c6);
+  --pico-typography-spacing-top: 0;
+}
+
+.settings-card .field {
+  margin-bottom: 0.65rem;
+}
+
+.settings-card .field > label,
+.settings-card .field label:not(.settings-check) {
+  font-family: var(--admin-sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+}
+
+.settings-card textarea,
+.settings-card input:not([type="checkbox"]),
+.settings-card select {
+  font-family: var(--admin-sans);
+  font-size: 0.85rem;
+  color: var(--user-ink);
+  margin-bottom: 0.25rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: #fff;
+  --pico-border-radius: 0.1rem;
+  --pico-border-color: var(--user-ink);
+  --pico-background-color: #fff;
+  --pico-color: var(--user-ink);
+}
+
+.settings-card textarea.settings-mono-textarea {
+  font-family: var(--admin-mono);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.settings-card .hint {
+  font-family: var(--admin-sans);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--pico-muted-color, #5c6570);
+  margin: 0.2rem 0 0;
+}
+
+.settings-card textarea:focus,
+.settings-card input:not([type="checkbox"]):focus,
+.settings-card select:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+  border-color: var(--user-ink);
+}
+
+/* Aligned grids for structured settings */
+.settings-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem 1.15rem;
+  align-items: start;
+  margin-bottom: 0.65rem;
+}
+
+@media (max-width: 860px) {
+  .settings-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-grid-3 > .field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+
+.settings-grid-3 > .field label {
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-grid-3 > .field input:not([type="checkbox"]),
+.settings-grid-3 > .field select {
+  height: 2.65rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0.35rem;
+  box-sizing: border-box;
+}
+
+.settings-grid-3 > .field select {
+  padding-right: 1.85rem;
+  background-position: right 0.7rem center !important;
+}
+
+.settings-grid-3 > .field .hint {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--pico-muted-color, #5c6570);
+  margin: 0;
+}
+
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.85rem 1.15rem;
+  align-items: start;
+  margin-bottom: 0.65rem;
+}
+
+@media (max-width: 720px) {
+  .settings-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-grid-2 > .field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+
+.settings-grid-2 > .field label {
+  margin-bottom: 0.35rem;
+}
+
+.settings-grid-2 > .field input:not([type="checkbox"]),
+.settings-grid-2 > .field select {
+  height: 2.65rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin-bottom: 0.35rem;
+  box-sizing: border-box;
+}
+
+.settings-grid-2 > .field select {
+  padding-right: 1.85rem;
+  background-position: right 0.7rem center !important;
+}
+
+.settings-grid-2 > .field .hint {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--pico-muted-color, #5c6570);
+  margin: 0;
+}
+
+/* Checkbox controls — reliable clicking and active feedback */
+.settings-check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 0.45rem 0 0.85rem;
+}
+
+.settings-check-group--inline {
+  margin: 0.25rem 0 0.45rem;
+}
+
+.settings-card label.settings-check,
+.settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  cursor: pointer;
+  font-family: var(--admin-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--user-ink);
+  margin-bottom: 0;
+  user-select: none;
+  padding: 0.15rem 0;
+  width: fit-content;
+}
+
+.settings-card label.settings-check span,
+.settings-check span {
+  font-family: var(--admin-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--user-ink);
+}
+
+.settings-check input[type="checkbox"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  min-width: 1.15rem !important;
+  min-height: 1.15rem !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 1.5px solid var(--user-ink) !important;
+  border-radius: 0.12rem !important;
+  background-color: #fff !important;
+  cursor: pointer;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box !important;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.settings-check input[type="checkbox"]:checked {
+  background-color: var(--user-ink) !important;
+  border-color: var(--user-ink) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgb(255, 255, 255)' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-position: center !important;
+  background-size: 0.75rem auto !important;
+  background-repeat: no-repeat !important;
+}
+
+.settings-check input[type="checkbox"]:hover {
+  border-color: var(--user-amber) !important;
+}
+
+.settings-check input[type="checkbox"]:focus {
+  outline: 2px solid var(--user-amber);
+  outline-offset: 1px;
+}
+
+.settings-actions {
+  margin: 1.5rem 0 1.5rem;
+}
+
+.field--bonus input {
+  max-width: 16rem;
+}
+
+.settings-actions button {
+  margin: 0;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.1rem;
+  background: var(--user-ink);
+  color: #f3f1eb;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.5rem 1rem;
+  box-shadow: 2px 2px 0 rgba(26, 31, 43, 0.18);
+  cursor: pointer;
+  --pico-background-color: var(--user-ink);
+  --pico-border-color: var(--user-ink);
+  --pico-color: #f3f1eb;
+  --pico-border-radius: 0.1rem;
+}
+
+.settings-actions button:hover {
+  background: #2a3142;
+  border-color: #2a3142;
+  --pico-background-color: #2a3142;
+  --pico-border-color: #2a3142;
 }
 
 /* API keys — credential roster */

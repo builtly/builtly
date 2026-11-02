@@ -27,7 +27,7 @@ export function getAppsCache() {
   return appsCache;
 }
 
-/** Keep section when switching apps: overview|config|keys|products|email|ai|users|activity|referrals */
+/** Keep section when switching apps: overview|config|settings|keys|products|email|ai|users|activity|referrals */
 export function sectionFromParts(parts) {
   if (parts[0] !== "apps" || !parts[1]) return "overview";
   const s = parts[2] || "";

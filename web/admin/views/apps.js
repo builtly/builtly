@@ -195,6 +195,7 @@ export async function renderAppDetail(el, appID) {
         <p class="user-dossier__title">${esc(app.name)}</p>
         <p class="user-dossier__sub">${esc(app.slug)}</p>
         <div class="user-dossier__actions">
+          <a class="user-ledger-link" href="#/apps/${esc(appID)}/settings">App settings</a>
           <a class="user-ledger-link" href="#/apps/${esc(appID)}/config">Configure integrations</a>
         </div>
       </div>
@@ -251,9 +252,6 @@ export async function renderAppDetail(el, appID) {
 
     <div class="user-ledger-head">
       <h2>Integrations</h2>
-      <div class="user-ledger-links" aria-label="Related">
-        <a class="user-ledger-link" href="#/apps/${esc(appID)}/config">Configure</a>
-      </div>
     </div>
     <div class="table-wrap apps-table-wrap ov-bind-wrap">
       <table class="apps-table ov-bind-table">
@@ -280,7 +278,8 @@ export async function renderAppDetail(el, appID) {
 
 export async function renderAppConfig(el, appID) {
   el.innerHTML = `<div class="page-head"><h1>Integrations</h1><p class="muted">Loading…</p></div>`;
-  const [cfg, connections] = await Promise.all([
+  const [app, cfg, connections] = await Promise.all([
+    api("GET", "/apps/" + encodeURIComponent(appID)),
     api("GET", "/apps/" + encodeURIComponent(appID) + "/config"),
     api("GET", "/connections"),
   ]);
@@ -288,7 +287,6 @@ export async function renderAppConfig(el, appID) {
   for (const c of connections.items || []) {
     (byProvider[c.provider] || (byProvider[c.provider] = [])).push(c);
   }
-  const settingsJSON = JSON.stringify(cfg.settings || {}, null, 2);
   const bound = PROVIDERS.filter((p) => {
     const e = (cfg.integrations && cfg.integrations[p]) || {};
     return !!e.connection_id;
@@ -342,9 +340,11 @@ export async function renderAppConfig(el, appID) {
   }).join("");
 
   el.innerHTML = `
+    <p class="user-back"><a href="#/apps/${esc(appID)}">← Back to Overview</a></p>
+
     <div class="page-head page-head-row user-page-head">
       <div>
-        <p class="user-kicker">App · bindings</p>
+        <p class="user-kicker">App · ${esc(app.slug || app.name)} · integrations</p>
         <h1 class="user-page-title">Integrations</h1>
         <p class="muted">Bind platform connections to this app. Credentials live under Platform → Connections.</p>
       </div>
@@ -357,16 +357,6 @@ export async function renderAppConfig(el, appID) {
       <div class="form-actions ig-actions">
         <button type="submit" id="save-integrations">Save integrations</button>
       </div>
-
-      <details class="ig-advanced">
-        <summary>Advanced app settings (JSON)</summary>
-        <div class="field">
-          <textarea id="app-settings-json" name="settings" rows="12" spellcheck="false">${esc(settingsJSON)}</textarea>
-        </div>
-        <div class="form-actions ig-actions">
-          <button type="button" id="save-settings">Save settings only</button>
-        </div>
-      </details>
     </form>`;
 
   applyRevealDelays(el, ".ig-bind[data-reveal]");
@@ -375,14 +365,6 @@ export async function renderAppConfig(el, appID) {
       || "Connection";
     wireMobileSelect(sel, { title });
   });
-
-  const readSettings = () => {
-    try {
-      return JSON.parse(String(el.querySelector("#app-settings-json")?.value || "{}"));
-    } catch {
-      throw new Error("settings must be valid JSON");
-    }
-  };
 
   const readIntegrations = () => {
     const form = el.querySelector("#put-config");
@@ -407,18 +389,9 @@ export async function renderAppConfig(el, appID) {
 
   el.querySelector("#put-config").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const settings = readSettings();
     const integrations = readIntegrations();
-    await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings, integrations });
+    await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings: cfg.settings || {}, integrations });
     showOk("Integrations saved");
-    await renderAppConfig(el, appID);
-  });
-
-  el.querySelector("#save-settings").addEventListener("click", async () => {
-    const settings = readSettings();
-    // Omit integrations so existing bindings are preserved.
-    await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings });
-    showOk("Settings saved");
     await renderAppConfig(el, appID);
   });
 }

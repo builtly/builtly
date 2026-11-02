@@ -11,6 +11,7 @@ import {
 import { closeChoiceSheet, openAppSwitcher, syncChromeLock } from "./choice-sheet.js";
 import { showErrorToast, showOkToast } from "./toast.js";
 import { renderAppsList, renderAppDetail, renderAppConfig } from "./views/apps.js";
+import { renderAppSettings } from "./views/app_settings.js";
 import { renderConnections } from "./views/connections.js";
 import { renderKeys } from "./views/keys.js";
 import { renderProducts } from "./views/products.js";
@@ -113,15 +114,14 @@ function shellHTML(parts, apps) {
   const appNav = current
     ? `
       <div class="nav-section">App</div>
-      ${navLink(hashForApp(current.id, "overview"), "Overview", inApp && section === "overview")}
-      ${navLink(hashForApp(current.id, "config"), "Integrations", inApp && section === "config")}
-      ${navLink(hashForApp(current.id, "keys"), "API keys", inApp && section === "keys")}
-      ${navLink(hashForApp(current.id, "products"), "Products", inApp && section === "products")}
-      ${navLink(hashForApp(current.id, "email"), "Email", inApp && section === "email")}
-      ${navLink(hashForApp(current.id, "ai"), "AI", inApp && section === "ai")}
+      ${navLink(hashForApp(current.id, "overview"), "Overview", inApp && (section === "overview" || section === "settings" || section === "config"))}
       ${navLink(hashForApp(current.id, "users"), "Users", inApp && section === "users")}
       ${navLink(hashForApp(current.id, "activity"), "Activity", inApp && section === "activity")}
+      ${navLink(hashForApp(current.id, "products"), "Products", inApp && section === "products")}
       ${navLink(hashForApp(current.id, "referrals"), "Referrals", inApp && section === "referrals")}
+      ${navLink(hashForApp(current.id, "ai"), "AI", inApp && section === "ai")}
+      ${navLink(hashForApp(current.id, "email"), "Email", inApp && section === "email")}
+      ${navLink(hashForApp(current.id, "keys"), "API keys", inApp && section === "keys")}
     `
     : `
       <div class="nav-section">App</div>
@@ -420,6 +420,11 @@ async function route() {
       const section = parts[2] || "";
       if (section === "config") {
         await renderAppConfig(view, appID);
+        hydrate(view);
+        return;
+      }
+      if (section === "settings") {
+        await renderAppSettings(view, appID);
         hydrate(view);
         return;
       }
