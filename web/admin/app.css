@@ -2717,6 +2717,16 @@ button[data-danger] {
   border-color: var(--user-ink);
 }
 
+.settings-card input:not([type="checkbox"]):disabled,
+.settings-card textarea:disabled,
+.settings-card select:disabled {
+  background: var(--user-paper-subtle, #f5f5f3);
+  color: var(--pico-muted-color, #888);
+  border-color: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 /* Aligned grids for structured settings */
 .settings-grid-3 {
   display: grid;

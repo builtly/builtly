@@ -699,6 +699,43 @@ func TestAuthServiceTTLAndPasswordDisabled(t *testing.T) {
 	}); err == nil {
 		t.Fatal("want login disabled")
 	}
+
+	// Guest accounts cannot register or log in when password auth is disabled and guest login is disabled,
+	// even if a guest email domain is configured.
+	disabled.Settings.Auth.GuestLoginEnabled = false
+	disabled.Settings.Auth.GuestEmailDomain = "device.example.com"
+	guestEmail := "guest_device1@device.example.com"
+	if _, err := h.authSvc.Register(context.Background(), disabled, auth.RegisterInput{
+		Email: guestEmail, Password: "guestpassword123",
+	}); err == nil {
+		t.Fatal("expected guest register to fail when guest login is disabled")
+	}
+	if _, err := h.authSvc.Login(context.Background(), disabled, auth.LoginInput{
+		Email: guestEmail, Password: "guestpassword123",
+	}); err == nil {
+		t.Fatal("expected guest login to fail when guest login is disabled")
+	}
+
+	// Guest accounts become available when guest login is enabled.
+	disabled.Settings.Auth.GuestLoginEnabled = true
+	reg, err := h.authSvc.Register(context.Background(), disabled, auth.RegisterInput{
+		Email: guestEmail, Password: "guestpassword123",
+	})
+	if err != nil {
+		t.Fatalf("guest register with guest login enabled: %v", err)
+	}
+	if reg.Tokens.AccessToken == "" {
+		t.Fatal("expected guest access token")
+	}
+	login, err := h.authSvc.Login(context.Background(), disabled, auth.LoginInput{
+		Email: guestEmail, Password: "guestpassword123",
+	})
+	if err != nil {
+		t.Fatalf("guest login with guest login enabled: %v", err)
+	}
+	if login.Tokens.AccessToken == "" {
+		t.Fatal("expected guest login access token")
+	}
 }
 
 func TestStartOAuthValidation(t *testing.T) {

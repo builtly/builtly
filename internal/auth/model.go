@@ -198,6 +198,7 @@ type PublicAuthConfig struct {
 	PasswordEnabled          bool                         `json:"password_enabled"`
 	RequireEmailVerification bool                         `json:"require_email_verification"`
 	GuestEmailDomain         string                       `json:"guest_email_domain,omitempty"`
+	GuestLoginEnabled        bool                         `json:"guest_login_enabled"`
 	Providers                map[string]PublicOAuthConfig `json:"providers"`
 }
 

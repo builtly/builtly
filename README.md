@@ -127,7 +127,7 @@ All client requests under `/api/v1/*` (except provider webhooks and OAuth redire
 
 ## Guest / Device Account Flow
 
-Builtly provides a first-class guest account migration workflow:
+Builtly provides a first-class guest account migration workflow. Enable **guest email login** and set a guest email domain under App Settings → Authentication & Access. Guest register, login, and credit transfer stay off until that switch is on, including when regular password login is disabled.
 
 ```
 [Unauthenticated Device]

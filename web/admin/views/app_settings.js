@@ -1,5 +1,6 @@
 import { api, esc, showOk } from "../api.js";
 import { wireMobileSelect } from "../choice-sheet.js";
+import { showErrorToast } from "../toast.js";
 
 const DEFAULT_MIME_TYPES = [
   "image/png",
@@ -75,10 +76,20 @@ export async function renderAppSettings(el, appID) {
               <span>Enable password login</span>
             </label>
             <label class="settings-check">
+              <input type="checkbox" id="auth-guest-login-enabled" name="auth_guest_login_enabled" ${auth.guest_login_enabled ? "checked" : ""}>
+              <span>Enable guest email login</span>
+            </label>
+            <label class="settings-check">
               <input type="checkbox" name="auth_require_email_verification" ${auth.require_email_verification ? "checked" : ""}>
               <span>Require email verification</span>
             </label>
           </div>
+        </div>
+
+        <div class="field field--full" id="guest-email-domain-field">
+          <label for="guest-email-domain">Guest Email Domain</label>
+          <input type="text" id="guest-email-domain" name="auth_guest_email_domain" placeholder="device.example.com" value="${esc(auth.guest_email_domain || '')}" ${auth.guest_login_enabled ? "" : "disabled"}>
+          <p class="hint">Dedicated domain for guest/device accounts (e.g. device.example.com). Enabled only when guest email login is checked. Guest accounts with this domain do not receive registration bonuses and can be migrated via transfer-guest-credits.</p>
         </div>
 
         <div class="field">
@@ -104,12 +115,6 @@ export async function renderAppSettings(el, appID) {
           <label for="signup-bonus-credits">Signup Bonus Credits</label>
           <input type="number" id="signup-bonus-credits" name="signup_bonus_credits" min="0" value="${esc(s.signup_bonus_credits || 0)}">
           <p class="hint">Initial credits granted upon new user registration.</p>
-        </div>
-
-        <div class="field field--full">
-          <label for="guest-email-domain">Guest Email Domain</label>
-          <input type="text" id="guest-email-domain" name="auth_guest_email_domain" placeholder="device.example.com" value="${esc(auth.guest_email_domain || '')}">
-          <p class="hint">Dedicated domain for guest/device accounts (e.g. device.example.com). Guest accounts with this domain do not receive registration bonuses and can be migrated via transfer-guest-credits.</p>
         </div>
       </section>
 
@@ -266,6 +271,10 @@ export async function renderAppSettings(el, appID) {
     const maxMB = Math.max(1, Number(fd.get("max_file_mb")) || 10);
     const quotaMB = Math.max(1, Number(fd.get("user_quota_mb")) || 100);
 
+    const guestLoginEnabled = fd.get("auth_guest_login_enabled") === "on";
+    const guestDomainInput = form.querySelector("#guest-email-domain");
+    const guestEmailDomain = guestDomainInput ? guestDomainInput.value.trim().toLowerCase() : "";
+
     return {
       ...(s || {}),
       allowed_origins: origins,
@@ -275,8 +284,9 @@ export async function renderAppSettings(el, appID) {
       auth: {
         ...(s.auth || {}),
         password_enabled: fd.get("auth_password_enabled") === "on",
+        guest_login_enabled: guestLoginEnabled,
         require_email_verification: fd.get("auth_require_email_verification") === "on",
-        guest_email_domain: String(fd.get("auth_guest_email_domain") || "").trim().toLowerCase(),
+        guest_email_domain: guestEmailDomain,
         providers,
       },
       storage: {
@@ -305,8 +315,26 @@ export async function renderAppSettings(el, appID) {
     };
   };
 
+  const guestLoginCheckbox = el.querySelector("#auth-guest-login-enabled");
+  const guestEmailDomainInput = el.querySelector("#guest-email-domain");
+  if (guestLoginCheckbox && guestEmailDomainInput) {
+    guestLoginCheckbox.addEventListener("change", () => {
+      guestEmailDomainInput.disabled = !guestLoginCheckbox.checked;
+      if (guestLoginCheckbox.checked) {
+        guestEmailDomainInput.focus();
+      }
+    });
+  }
+
   el.querySelector("#settings-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    const guestLogin = ev.target.querySelector("#auth-guest-login-enabled");
+    const guestDomain = ev.target.querySelector("#guest-email-domain");
+    if (guestLogin && guestLogin.checked && !guestDomain?.value?.trim()) {
+      guestDomain?.focus();
+      showErrorToast({ message: "Guest Email Domain is required when guest email login is enabled" });
+      return;
+    }
     const payload = collectStructuredSettings(ev.target);
     await api("PUT", "/apps/" + encodeURIComponent(appID) + "/config", { settings: payload });
     showOk("Settings saved");

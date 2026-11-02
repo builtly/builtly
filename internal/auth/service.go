@@ -119,13 +119,15 @@ type LoginInput struct {
 }
 
 // Register creates a password user and session.
+// Guest emails matching auth.guest_email_domain are allowed when guest login is enabled, even when regular password login is disabled.
 func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput) (TokenResponse, error) {
-	if !app.Settings.Auth.PasswordEnabled {
-		return TokenResponse{}, ErrPasswordDisabled
-	}
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
 		return TokenResponse{}, err
+	}
+	isGuest := app.Settings.IsGuestEmail(emailAddr)
+	if !app.Settings.Auth.PasswordEnabled && !isGuest {
+		return TokenResponse{}, ErrPasswordDisabled
 	}
 	if err := ValidatePasswordLength(in.Password); err != nil {
 		return TokenResponse{}, err
@@ -140,7 +142,6 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 	}
 
 	var resp TokenResponse
-	isGuest := app.Settings.IsGuestEmail(emailAddr)
 	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		now := db.Now()
 		uid := uuid.Must(uuid.NewV7())
@@ -223,15 +224,16 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 }
 
 // Login authenticates email/password.
+// Guest emails matching auth.guest_email_domain are allowed when guest login is enabled, even when regular password login is disabled.
 func (s *Service) Login(ctx context.Context, app tenant.App, in LoginInput) (TokenResponse, error) {
-	if !app.Settings.Auth.PasswordEnabled {
-		return TokenResponse{}, ErrPasswordDisabled
-	}
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
 		// still burn cycles
 		_, _ = VerifyPassword(in.Password, dummyHash)
 		return TokenResponse{}, ErrInvalidCredentials
+	}
+	if !app.Settings.Auth.PasswordEnabled && !app.Settings.IsGuestEmail(emailAddr) {
+		return TokenResponse{}, ErrPasswordDisabled
 	}
 	u, err := s.store.GetByEmail(ctx, nil, app.ID, emailAddr)
 	if err != nil {

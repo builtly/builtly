@@ -22,8 +22,9 @@ func TestTransferGuestCredits(t *testing.T) {
 		AllowIAPSandbox:    true,
 		SignupBonusCredits: 50,
 		Auth: tenant.AuthSettings{
-			PasswordEnabled:  true,
-			GuestEmailDomain: "device.example.com",
+			PasswordEnabled:   true,
+			GuestLoginEnabled: true,
+			GuestEmailDomain:  "device.example.com",
 		},
 		Email: tenant.EmailSettings{FromAddress: "n@guestapp.com", ActionBaseURL: "https://guestapp.com"},
 	})
@@ -198,8 +199,9 @@ func TestTransferGuestCreditsWithRefreshTokenAndPurchaseReassignment(t *testing.
 		AllowedOrigins:  []string{"https://rtapp.com"},
 		AllowIAPSandbox: true,
 		Auth: tenant.AuthSettings{
-			PasswordEnabled:  true,
-			GuestEmailDomain: "device.example.com",
+			PasswordEnabled:   true,
+			GuestLoginEnabled: true,
+			GuestEmailDomain:  "device.example.com",
 		},
 		Email: tenant.EmailSettings{FromAddress: "n@rtapp.com", ActionBaseURL: "https://rtapp.com"},
 	})

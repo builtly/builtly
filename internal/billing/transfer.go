@@ -31,7 +31,7 @@ type TransferGuestCreditsResult struct {
 
 // TransferGuestCredits moves remaining credits and purchases from a guest account to a formal user account.
 func (s *Service) TransferGuestCredits(ctx context.Context, app tenant.App, formalUserID uuid.UUID, in TransferGuestCreditsInput) (TransferGuestCreditsResult, error) {
-	if app.Settings.Auth.GuestEmailDomain == "" {
+	if !app.Settings.Auth.GuestLoginEnabled || app.Settings.Auth.GuestEmailDomain == "" {
 		return TransferGuestCreditsResult{}, ErrGuestTransferFailed.WithDetails(map[string]any{
 			"reason": "guest_email_domain_not_configured",
 		})

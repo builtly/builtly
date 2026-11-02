@@ -68,6 +68,11 @@ func (s *Service) PublicConfig(ctx context.Context, app tenant.App) (PublicConfi
 		}
 	}
 
+	guestDomain := ""
+	if app.Settings.Auth.GuestLoginEnabled {
+		guestDomain = app.Settings.Auth.GuestEmailDomain
+	}
+
 	return PublicConfig{
 		AppID: app.ID,
 		Slug:  app.Slug,
@@ -75,7 +80,8 @@ func (s *Service) PublicConfig(ctx context.Context, app tenant.App) (PublicConfi
 		Auth: PublicAuthConfig{
 			PasswordEnabled:          app.Settings.Auth.PasswordEnabled,
 			RequireEmailVerification: app.Settings.Auth.RequireEmailVerification,
-			GuestEmailDomain:         app.Settings.Auth.GuestEmailDomain,
+			GuestEmailDomain:         guestDomain,
+			GuestLoginEnabled:        app.Settings.Auth.GuestLoginEnabled,
 			Providers:                providers,
 		},
 		SignupBonusCredits: app.Settings.SignupBonusCredits,

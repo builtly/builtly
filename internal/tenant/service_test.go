@@ -95,3 +95,43 @@ func TestAppCRUDAndMiddleware(t *testing.T) {
 		t.Fatalf("want not found, got %v", err)
 	}
 }
+
+func TestSettingsGuestLoginValidationAndMatching(t *testing.T) {
+	// 1. GuestLoginEnabled true without GuestEmailDomain should fail validation
+	st := tenant.DefaultSettings()
+	st.Auth.GuestLoginEnabled = true
+	st.Auth.GuestEmailDomain = ""
+	if err := st.Validate(); err == nil {
+		t.Fatal("expected error when guest_login_enabled is true but guest_email_domain is empty")
+	}
+
+	// 2. GuestLoginEnabled true with invalid domain
+	st.Auth.GuestEmailDomain = "invalid domain.com"
+	if err := st.Validate(); err == nil {
+		t.Fatal("expected error with invalid guest_email_domain")
+	}
+
+	// 3. GuestLoginEnabled true with valid domain
+	st.Auth.GuestEmailDomain = "device.example.com"
+	if err := st.Validate(); err != nil {
+		t.Fatalf("unexpected validation error: %v", err)
+	}
+
+	// 4. IsGuestEmail when GuestLoginEnabled is false
+	st.Auth.GuestLoginEnabled = false
+	if st.IsGuestEmail("guest_dev123@device.example.com") {
+		t.Fatal("IsGuestEmail should return false when GuestLoginEnabled is false")
+	}
+
+	// 5. IsGuestEmail when GuestLoginEnabled is true
+	st.Auth.GuestLoginEnabled = true
+	if !st.IsGuestEmail("guest_dev123@device.example.com") {
+		t.Fatal("IsGuestEmail should return true for valid guest email")
+	}
+	if st.IsGuestEmail("regular@device.example.com") {
+		t.Fatal("IsGuestEmail should return false for regular email prefix")
+	}
+	if st.IsGuestEmail("guest_@device.example.com") {
+		t.Fatal("IsGuestEmail should return false for empty guest id")
+	}
+}

@@ -53,6 +53,7 @@ type AuthSettings struct {
 	Providers                []string `json:"providers"`
 	RequireEmailVerification bool     `json:"require_email_verification"`
 	GuestEmailDomain         string   `json:"guest_email_domain"`
+	GuestLoginEnabled        bool     `json:"guest_login_enabled"`
 }
 
 // EmailSettings is the transactional sender identity.
@@ -259,6 +260,9 @@ func (s Settings) Validate() error {
 	if s.SignupBonusCredits < 0 {
 		return fmt.Errorf("tenant: signup_bonus_credits must be >= 0")
 	}
+	if s.Auth.GuestLoginEnabled && strings.TrimSpace(s.Auth.GuestEmailDomain) == "" {
+		return fmt.Errorf("tenant: auth.guest_email_domain is required when guest_login_enabled is true")
+	}
 	if s.Auth.GuestEmailDomain != "" {
 		dom := strings.ToLower(strings.TrimSpace(s.Auth.GuestEmailDomain))
 		if strings.ContainsAny(dom, " @/\\:?#*") || strings.HasPrefix(dom, ".") || strings.HasSuffix(dom, ".") {
@@ -306,7 +310,11 @@ func (s Settings) AllowsOrigin(origin string) bool {
 }
 
 // IsGuestEmail checks if an email matches the configured guest email format: guest_<id>@<guest_email_domain>.
+// Guest login must be enabled and guest_email_domain must be non-empty.
 func (s Settings) IsGuestEmail(email string) bool {
+	if !s.Auth.GuestLoginEnabled {
+		return false
+	}
 	dom := strings.ToLower(strings.TrimSpace(s.Auth.GuestEmailDomain))
 	if dom == "" || email == "" {
 		return false
