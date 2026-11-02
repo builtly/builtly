@@ -1,0 +1,12 @@
+.git
+.env*
+.idea
+.vscode
+.neon
+node_modules
+/builtly
+/bin
+/data
+*.db
+*.db-*
+*.tmp
