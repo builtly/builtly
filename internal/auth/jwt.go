@@ -65,6 +65,25 @@ func (t *TokenService) IssueAccess(appID, userID uuid.UUID, amr string, emailVer
 
 // VerifyAccess validates an access token for the expected app audience.
 func (t *TokenService) VerifyAccess(tokenString string, appID uuid.UUID) (AccessInfo, error) {
+	return t.verifyAccessWithLeeway(tokenString, appID, false)
+}
+
+// VerifyAccessIgnoreExpiry validates an access token signature and audience without failing on expiration.
+func (t *TokenService) VerifyAccessIgnoreExpiry(tokenString string, appID uuid.UUID) (AccessInfo, error) {
+	return t.verifyAccessWithLeeway(tokenString, appID, true)
+}
+
+func (t *TokenService) verifyAccessWithLeeway(tokenString string, appID uuid.UUID, withoutClaimsValidation bool) (AccessInfo, error) {
+	opts := []jwt.ParserOption{
+		jwt.WithIssuer("builtly"),
+		jwt.WithAudience(appID.String()),
+		jwt.WithValidMethods([]string{"HS256"}),
+	}
+	if withoutClaimsValidation {
+		opts = append(opts, jwt.WithoutClaimsValidation())
+	} else {
+		opts = append(opts, jwt.WithLeeway(30*time.Second))
+	}
 	parsed, err := jwt.ParseWithClaims(tokenString, &accessClaims{}, func(tok *jwt.Token) (any, error) {
 		if tok.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected alg")
@@ -75,13 +94,31 @@ func (t *TokenService) VerifyAccess(tokenString string, appID uuid.UUID) (Access
 			return nil, fmt.Errorf("unknown kid")
 		}
 		return key, nil
-	}, jwt.WithIssuer("builtly"), jwt.WithAudience(appID.String()), jwt.WithLeeway(30*time.Second), jwt.WithValidMethods([]string{"HS256"}))
+	}, opts...)
 	if err != nil {
 		return AccessInfo{}, err
 	}
 	claims, ok := parsed.Claims.(*accessClaims)
-	if !ok || !parsed.Valid {
+	if !ok || (!withoutClaimsValidation && !parsed.Valid) {
 		return AccessInfo{}, fmt.Errorf("invalid token")
+	}
+	// Manual checks when withoutClaimsValidation
+	if withoutClaimsValidation {
+		iss, _ := claims.GetIssuer()
+		if iss != "builtly" {
+			return AccessInfo{}, fmt.Errorf("invalid issuer")
+		}
+		auds, _ := claims.GetAudience()
+		foundAud := false
+		for _, a := range auds {
+			if a == appID.String() {
+				foundAud = true
+				break
+			}
+		}
+		if !foundAud {
+			return AccessInfo{}, fmt.Errorf("audience mismatch")
+		}
 	}
 	uid, err := uuid.Parse(claims.Subject)
 	if err != nil {

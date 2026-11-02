@@ -74,6 +74,12 @@ type WelcomeMailer interface {
 // SetWelcomeMailer attaches the optional welcome-mail publisher.
 func (s *Service) SetWelcomeMailer(m WelcomeMailer) { s.welcome = m }
 
+// Store exposes the auth store.
+func (s *Service) Store() *Store { return s.store }
+
+// Tokens exposes the token service.
+func (s *Service) Tokens() *TokenService { return s.tokens }
+
 // NewService constructs an auth Service.
 func NewService(
 	database *db.DB,
@@ -134,6 +140,7 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 	}
 
 	var resp TokenResponse
+	isGuest := app.Settings.IsGuestEmail(emailAddr)
 	err = s.db.WithTx(ctx, func(tx *sqlx.Tx) error {
 		now := db.Now()
 		uid := uuid.Must(uuid.NewV7())
@@ -147,6 +154,10 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			Status: StatusActive, Attribution: attr, ReferralCode: &code,
 			CreatedAt: now, UpdatedAt: now,
 		}
+		if isGuest {
+			// Guest accounts have verified email automatically (no email token/verification needed)
+			u.EmailVerifiedAt = db.NullTime{Time: now, Valid: true}
+		}
 		if err := s.store.Insert(ctx, tx, u); err != nil {
 			var uv db.ErrUniqueViolation
 			if errors.As(err, &uv) {
@@ -154,7 +165,7 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			}
 			return err
 		}
-		if app.Settings.SignupBonusCredits > 0 {
+		if !isGuest && app.Settings.SignupBonusCredits > 0 {
 			if _, err := s.credits.ApplyTx(ctx, tx, credit.ApplyInput{
 				AppID: app.ID, UserID: uid, EntryType: credit.TypeSignupBonus,
 				Amount:         app.Settings.SignupBonusCredits,
@@ -165,38 +176,40 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			}
 		}
 
-		verifyRaw, verifyHash, err := newEmailTokenRaw()
-		if err != nil {
-			return err
-		}
-		et := EmailToken{
-			ID: uuid.Must(uuid.NewV7()), AppID: app.ID, UserID: uid,
-			Purpose: PurposeVerifyEmail, Email: emailAddr, TokenHash: verifyHash,
-			ExpiresAt: db.Time(time.Now().UTC().Add(24 * time.Hour)), CreatedAt: now,
-		}
-		if err := s.store.InsertEmailToken(ctx, tx, et); err != nil {
-			return err
-		}
+		if !isGuest {
+			verifyRaw, verifyHash, err := newEmailTokenRaw()
+			if err != nil {
+				return err
+			}
+			et := EmailToken{
+				ID: uuid.Must(uuid.NewV7()), AppID: app.ID, UserID: uid,
+				Purpose: PurposeVerifyEmail, Email: emailAddr, TokenHash: verifyHash,
+				ExpiresAt: db.Time(time.Now().UTC().Add(24 * time.Hour)), CreatedAt: now,
+			}
+			if err := s.store.InsertEmailToken(ctx, tx, et); err != nil {
+				return err
+			}
 
-		payload, err := buildUserRegisteredPayload(app, uid, emailAddr, verifyRaw, et.ExpiresAt.Time())
-		if err != nil {
-			return err
-		}
-		appID := app.ID
-		if err := s.outbox.PublishTx(ctx, tx, outbox.Event{
-			AppID: &appID, Type: outbox.EventUserRegistered, Payload: payload,
-		}); err != nil {
-			return err
-		}
-		if err := s.publishWelcome(ctx, tx, app, emailAddr); err != nil {
-			return err
+			payload, err := buildUserRegisteredPayload(app, uid, emailAddr, verifyRaw, et.ExpiresAt.Time())
+			if err != nil {
+				return err
+			}
+			appID := app.ID
+			if err := s.outbox.PublishTx(ctx, tx, outbox.Event{
+				AppID: &appID, Type: outbox.EventUserRegistered, Payload: payload,
+			}); err != nil {
+				return err
+			}
+			if err := s.publishWelcome(ctx, tx, app, emailAddr); err != nil {
+				return err
+			}
 		}
 
 		tr, err := s.issueSessionTx(ctx, tx, app, u, MethodPassword, in.UserAgent, in.IP, true)
 		if err != nil {
 			return err
 		}
-		if in.ReferralCode != "" && s.referrals != nil {
+		if !isGuest && in.ReferralCode != "" && s.referrals != nil {
 			ar, err := s.referrals.ApplyTx(ctx, tx, app, uid, in.ReferralCode)
 			if err != nil {
 				return err
@@ -406,7 +419,7 @@ func (s *Service) VerifyEmail(ctx context.Context, app tenant.App, raw string) (
 // ForgotPassword always succeeds; may enqueue reset mail.
 func (s *Service) ForgotPassword(ctx context.Context, app tenant.App, emailAddr string) error {
 	normalized, err := normalizeEmail(emailAddr)
-	if err != nil {
+	if err != nil || app.Settings.IsGuestEmail(normalized) {
 		return nil
 	}
 	u, err := s.store.GetByEmail(ctx, nil, app.ID, normalized)

@@ -52,6 +52,7 @@ type AuthSettings struct {
 	PasswordEnabled          bool     `json:"password_enabled"`
 	Providers                []string `json:"providers"`
 	RequireEmailVerification bool     `json:"require_email_verification"`
+	GuestEmailDomain         string   `json:"guest_email_domain"`
 }
 
 // EmailSettings is the transactional sender identity.
@@ -258,6 +259,12 @@ func (s Settings) Validate() error {
 	if s.SignupBonusCredits < 0 {
 		return fmt.Errorf("tenant: signup_bonus_credits must be >= 0")
 	}
+	if s.Auth.GuestEmailDomain != "" {
+		dom := strings.ToLower(strings.TrimSpace(s.Auth.GuestEmailDomain))
+		if strings.ContainsAny(dom, " @/\\:?#*") || strings.HasPrefix(dom, ".") || strings.HasSuffix(dom, ".") {
+			return fmt.Errorf("tenant: invalid auth.guest_email_domain %q", s.Auth.GuestEmailDomain)
+		}
+	}
 	switch s.Affiliate.Provider {
 	case "", "none", "promotekit", "affonso":
 	default:
@@ -296,6 +303,21 @@ func (s Settings) AllowsOrigin(origin string) bool {
 		}
 	}
 	return false
+}
+
+// IsGuestEmail checks if an email matches the configured guest email format: guest_<id>@<guest_email_domain>.
+func (s Settings) IsGuestEmail(email string) bool {
+	dom := strings.ToLower(strings.TrimSpace(s.Auth.GuestEmailDomain))
+	if dom == "" || email == "" {
+		return false
+	}
+	e := strings.ToLower(strings.TrimSpace(email))
+	suffix := "@" + dom
+	if !strings.HasSuffix(e, suffix) {
+		return false
+	}
+	local := strings.TrimSuffix(e, suffix)
+	return strings.HasPrefix(local, "guest_") && len(local) > len("guest_")
 }
 
 // Marshal returns JSON for persistence.

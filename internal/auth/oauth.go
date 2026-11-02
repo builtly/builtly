@@ -75,6 +75,7 @@ func (s *Service) PublicConfig(ctx context.Context, app tenant.App) (PublicConfi
 		Auth: PublicAuthConfig{
 			PasswordEnabled:          app.Settings.Auth.PasswordEnabled,
 			RequireEmailVerification: app.Settings.Auth.RequireEmailVerification,
+			GuestEmailDomain:         app.Settings.Auth.GuestEmailDomain,
 			Providers:                providers,
 		},
 		SignupBonusCredits: app.Settings.SignupBonusCredits,

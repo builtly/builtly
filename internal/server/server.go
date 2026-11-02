@@ -198,6 +198,7 @@ func (s *Server) buildRouter() chi.Router {
 						if s.deps.Billing != nil {
 							user.Post("/checkout/stripe", s.deps.Billing.CheckoutStripe)
 							user.Post("/billing/verify-iap", s.deps.Billing.VerifyIAP)
+							user.Post("/billing/transfer-guest-credits", s.deps.Billing.TransferGuestCredits)
 						}
 						if s.deps.Storage != nil {
 							user.Get("/files", s.deps.Storage.List)

@@ -33,6 +33,7 @@ type Service struct {
 	iStore   *integration.Store
 	box      *secrets.Box
 	users    *auth.Store
+	authTokens *auth.TokenService
 	tenants  *tenant.Service
 	stripe   *stripeapi.Client
 	devHTTP  bool // allow http://localhost* checkout URLs
@@ -66,6 +67,11 @@ func NewService(
 
 // Stripe returns the Stripe API client (for admin connection enrichment).
 func (s *Service) Stripe() *stripeapi.Client { return s.stripe }
+
+// SetAuthTokens wires the auth TokenService for validating guest access tokens during transfer.
+func (s *Service) SetAuthTokens(tokens *auth.TokenService) {
+	s.authTokens = tokens
+}
 
 // Store exposes the purchase store for admin listing.
 func (s *Service) Store() *Store { return s.store }

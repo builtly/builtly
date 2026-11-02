@@ -105,6 +105,12 @@ export async function renderAppSettings(el, appID) {
           <input type="number" id="signup-bonus-credits" name="signup_bonus_credits" min="0" value="${esc(s.signup_bonus_credits || 0)}">
           <p class="hint">Initial credits granted upon new user registration.</p>
         </div>
+
+        <div class="field field--full">
+          <label for="guest-email-domain">Guest Email Domain</label>
+          <input type="text" id="guest-email-domain" name="auth_guest_email_domain" placeholder="device.example.com" value="${esc(auth.guest_email_domain || '')}">
+          <p class="hint">Dedicated domain for guest/device accounts (e.g. device.example.com). Guest accounts with this domain do not receive registration bonuses and can be migrated via transfer-guest-credits.</p>
+        </div>
       </section>
 
       <!-- Section 3: Storage Limits -->
@@ -270,6 +276,7 @@ export async function renderAppSettings(el, appID) {
         ...(s.auth || {}),
         password_enabled: fd.get("auth_password_enabled") === "on",
         require_email_verification: fd.get("auth_require_email_verification") === "on",
+        guest_email_domain: String(fd.get("auth_guest_email_domain") || "").trim().toLowerCase(),
         providers,
       },
       storage: {

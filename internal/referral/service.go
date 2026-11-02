@@ -70,12 +70,18 @@ func (s *Service) ApplyTx(ctx context.Context, tx *sqlx.Tx, app tenant.App, refe
 	if referrer.Status != "active" {
 		return ApplyResult{Applied: false, Reason: "referral_code_invalid"}, nil
 	}
+	if referrer.Email != nil && app.Settings.IsGuestEmail(*referrer.Email) {
+		return ApplyResult{Applied: false, Reason: "referral_code_invalid"}, nil
+	}
 	if referrer.ID == refereeID {
 		return ApplyResult{Applied: false, Reason: "referral_self"}, nil
 	}
 	referee, err := s.users.GetUser(ctx, tx, app.ID, refereeID)
 	if err != nil {
 		return ApplyResult{}, err
+	}
+	if referee.Email != nil && app.Settings.IsGuestEmail(*referee.Email) {
+		return ApplyResult{Applied: false, Reason: "referral_code_invalid"}, nil
 	}
 	window := app.Settings.Referral.ApplyWindowDays
 	if window > 0 {

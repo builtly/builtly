@@ -230,6 +230,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 		database, billingStore, catalogSvc, creditSvc, publisher, resolver, iSvc, iStore, box, userStore, tSvc,
 		stripeClient, cfg.Env == "development",
 	)
+	billingSvc.SetAuthTokens(tokens)
 	appleVerifier, err := appstore.NewVerifier()
 	if err != nil {
 		log.Error("apple jws verifier", "err", err)

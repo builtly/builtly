@@ -32,6 +32,10 @@ func (s *Service) SetConsumeHook(fn ConsumeHook) {
 	s.consumeHook = fn
 }
 
+// Store exposes the credit store for low-level atomic operations.
+func (s *Service) Store() *Store { return s.store }
+
+
 // GetBalance returns the current balance (0 if no row).
 func (s *Service) GetBalance(ctx context.Context, appID, userID uuid.UUID) (Balance, error) {
 	b, err := s.store.GetBalance(ctx, nil, appID, userID)
@@ -78,6 +82,24 @@ func (s *Service) CountAppLedger(ctx context.Context, appID uuid.UUID, filter Ap
 func (s *Service) GetByReference(ctx context.Context, appID uuid.UUID, entryType, refType, refID string) (Entry, error) {
 	return s.store.GetByReference(ctx, nil, appID, entryType, refType, refID)
 }
+
+// GetByReferenceTx loads a ledger entry by type and reference inside an existing transaction.
+func (s *Service) GetByReferenceTx(ctx context.Context, q db.Querier, appID uuid.UUID, entryType, refType, refID string) (Entry, error) {
+	return s.store.GetByReference(ctx, q, appID, entryType, refType, refID)
+}
+
+// GetBalanceTx returns current balance inside a transaction.
+func (s *Service) GetBalanceTx(ctx context.Context, q db.Querier, appID, userID uuid.UUID) (Balance, error) {
+	b, err := s.store.GetBalance(ctx, q, appID, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return Balance{AppID: appID, UserID: userID, Balance: 0, UpdatedAt: db.Now()}, nil
+		}
+		return Balance{}, err
+	}
+	return b, nil
+}
+
 
 // SumReversals returns absolute affiliate_reversal total for a purchase reference.
 func (s *Service) SumReversals(ctx context.Context, appID uuid.UUID, refType, refID string) (int64, error) {

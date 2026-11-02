@@ -217,6 +217,18 @@ func (s *Store) TryInsertWebhookEvent(ctx context.Context, q db.Querier, ev Webh
 	return existing, false, err
 }
 
+// ReassignPurchasesUser updates the user_id of all purchases belonging to oldUserID to newUserID.
+func (s *Store) ReassignPurchasesUser(ctx context.Context, q db.Querier, appID, oldUserID, newUserID uuid.UUID, now db.Time) (int64, error) {
+	res, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
+		UPDATE purchases SET user_id = ?, updated_at = ?
+		WHERE app_id = ? AND user_id = ?`), newUserID, now, appID, oldUserID)
+	if err != nil {
+		return 0, db.MapError(err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // ExpireStalePendingPurchases marks pending purchases older than cutoff as expired.
 func (s *Store) ExpireStalePendingPurchases(ctx context.Context, cutoff, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, s.db.Rebind(`

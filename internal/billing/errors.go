@@ -14,4 +14,6 @@ var (
 	ErrProductNotAvailable      = apperr.New(http.StatusUnprocessableEntity, "product_not_available", "product is not available")
 	ErrPurchaseAlreadyClaimed   = apperr.New(http.StatusConflict, "purchase_already_claimed", "purchase already claimed by another user")
 	ErrReceiptInvalid           = apperr.New(http.StatusUnprocessableEntity, "receipt_invalid", "receipt is invalid")
+	ErrGuestTransferFailed      = apperr.New(http.StatusBadRequest, "guest_transfer_failed", "invalid guest credentials or transfer request")
+	ErrGuestAlreadyTransferred  = apperr.New(http.StatusConflict, "guest_already_transferred", "guest credits have already been transferred to another user")
 )

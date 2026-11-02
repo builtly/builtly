@@ -183,6 +183,7 @@ func setupIAP(t *testing.T) *iapHarness {
 		Auth: auth.NewHandler(authSvc, nil), Catalog: catalog.NewHandler(catSvc), Billing: billing.NewHandler(billSvc),
 		VoidedPoller: billing.NewVoidedPoller(billSvc),
 	})
+	billSvc.SetAuthTokens(tokens)
 	h.srv, h.tSvc, h.iSvc, h.catalog, h.billing, h.credits, h.authSvc = srv, tSvc, iSvc, catSvc, billSvc, creditSvc, authSvc
 	return h
 }

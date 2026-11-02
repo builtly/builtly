@@ -98,3 +98,29 @@ func (h *Handler) VerifyIAP(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
+
+// TransferGuestCredits handles POST /billing/transfer-guest-credits.
+func (h *Handler) TransferGuestCredits(w http.ResponseWriter, r *http.Request) {
+	app, ok := tenant.FromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	p, ok := principal.FromContext(r.Context())
+	if !ok || p.IsAPIKey || p.UserID == uuid.Nil {
+		httpx.WriteError(w, r, apperr.Unauthorized)
+		return
+	}
+	var body TransferGuestCreditsInput
+	if err := httpx.DecodeJSON(r, &body); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	res, err := h.svc.TransferGuestCredits(r.Context(), app, p.UserID, body)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
