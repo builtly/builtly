@@ -12,8 +12,10 @@ CREATE TABLE apps (
 
 CREATE TABLE connections (
     id           UUID PRIMARY KEY,
-    provider     TEXT NOT NULL CHECK (provider IN ('stripe', 'resend', 'r2', 'google_oauth', 'github_oauth',
-                     'apple_signin', 'apple_iap', 'google_play', 'posthog', 'promotekit', 'affonso')),
+    provider     TEXT NOT NULL CHECK (provider IN (
+                     'stripe', 'resend', 'r2', 'google_oauth', 'github_oauth',
+                     'apple_signin', 'apple_iap', 'google_play', 'posthog', 'promotekit', 'affonso',
+                     'openai_compatible')),
     name         TEXT NOT NULL,
     settings     JSONB NOT NULL DEFAULT '{}',
     secrets_enc  BYTEA NOT NULL,
@@ -66,6 +68,8 @@ CREATE TABLE users (
     deleted_at         TIMESTAMPTZ NULL,
     created_at         TIMESTAMPTZ NOT NULL,
     updated_at         TIMESTAMPTZ NOT NULL,
+    locale             TEXT NOT NULL DEFAULT '',
+    last_ip            TEXT NOT NULL DEFAULT '',
     CONSTRAINT uq_users_app_id UNIQUE (app_id, id)
 );
 CREATE UNIQUE INDEX uq_users_app_email    ON users (app_id, email)         WHERE email IS NOT NULL;
@@ -190,6 +194,7 @@ CREATE TABLE purchases (
 CREATE UNIQUE INDEX uq_purchases_ref ON purchases (app_id, provider, provider_ref) WHERE provider_ref IS NOT NULL;
 CREATE INDEX idx_purchases_payment_ref ON purchases (provider, payment_ref) WHERE payment_ref IS NOT NULL;
 CREATE INDEX idx_purchases_user ON purchases (app_id, user_id, created_at DESC);
+CREATE INDEX idx_purchases_app_created ON purchases (app_id, created_at DESC, id DESC);
 
 CREATE TABLE webhook_events (
     id             UUID PRIMARY KEY,
@@ -242,6 +247,8 @@ CREATE TABLE credit_ledger (
 );
 CREATE INDEX idx_ledger_user ON credit_ledger (app_id, user_id, created_at DESC, id DESC);
 CREATE INDEX idx_ledger_ref  ON credit_ledger (app_id, reference_type, reference_id);
+CREATE INDEX idx_ledger_app_created ON credit_ledger (app_id, created_at DESC, id DESC);
+CREATE INDEX idx_ledger_app_type ON credit_ledger (app_id, entry_type, created_at DESC, id DESC);
 
 CREATE FUNCTION credit_ledger_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'credit_ledger is append-only'; END $$;
@@ -322,3 +329,57 @@ CREATE TABLE admin_audit_log (
     created_at   TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX idx_audit_app ON admin_audit_log (app_id, created_at DESC);
+
+CREATE TABLE email_templates (
+    id          UUID PRIMARY KEY,
+    app_id      UUID NOT NULL REFERENCES apps(id),
+    key         TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    subject     TEXT NOT NULL,
+    html        TEXT NOT NULL,
+    text        TEXT NOT NULL DEFAULT '',
+    variables   JSONB NOT NULL DEFAULT '[]',
+    published   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL
+);
+CREATE UNIQUE INDEX uq_email_templates_app_key ON email_templates (app_id, key);
+CREATE INDEX idx_email_templates_app ON email_templates (app_id, created_at);
+
+CREATE TABLE email_trigger_bindings (
+    app_id      UUID NOT NULL REFERENCES apps(id),
+    trigger     TEXT NOT NULL,
+    template_id UUID NOT NULL REFERENCES email_templates(id),
+    updated_at  TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (app_id, trigger)
+);
+
+CREATE TABLE email_sends (
+    app_id          UUID NOT NULL REFERENCES apps(id),
+    idempotency_key TEXT NOT NULL,
+    template_key    TEXT NOT NULL,
+    variables_hash  TEXT NOT NULL,
+    outbox_id       UUID NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (app_id, idempotency_key)
+);
+
+CREATE TABLE ai_presets (
+    id                    UUID PRIMARY KEY,
+    app_id                UUID NOT NULL REFERENCES apps(id),
+    slug                  TEXT NOT NULL,
+    name                  TEXT NOT NULL,
+    description           TEXT NOT NULL DEFAULT '',
+    model                 TEXT NOT NULL,
+    system_prompt         TEXT NOT NULL DEFAULT '',
+    user_prompt_template  TEXT NOT NULL DEFAULT '',
+    temperature           DOUBLE PRECISION NOT NULL DEFAULT 0.7,
+    max_tokens            INTEGER NOT NULL DEFAULT 2048,
+    response_format       TEXT NOT NULL DEFAULT 'text',
+    credits_cost          BIGINT NOT NULL DEFAULT 1 CHECK (credits_cost >= 0),
+    published             BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMPTZ NOT NULL,
+    updated_at            TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_ai_presets_app_slug UNIQUE (app_id, slug)
+);
+CREATE INDEX idx_ai_presets_app ON ai_presets (app_id, created_at DESC);

@@ -115,7 +115,7 @@ type LoginInput struct {
 // Register creates a password user and session.
 func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput) (TokenResponse, error) {
 	if !app.Settings.Auth.PasswordEnabled {
-		return TokenResponse{}, ErrProviderDisabled
+		return TokenResponse{}, ErrPasswordDisabled
 	}
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
@@ -212,7 +212,7 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 // Login authenticates email/password.
 func (s *Service) Login(ctx context.Context, app tenant.App, in LoginInput) (TokenResponse, error) {
 	if !app.Settings.Auth.PasswordEnabled {
-		return TokenResponse{}, ErrProviderDisabled
+		return TokenResponse{}, ErrPasswordDisabled
 	}
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
