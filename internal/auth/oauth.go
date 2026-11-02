@@ -168,17 +168,24 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 	if flow.Provider != providerName || flow.Status != FlowStarted {
 		return "", ErrInvalidOAuthRequest
 	}
+
+	var attr struct {
+		ClientState string `json:"client_state"`
+	}
+	_ = json.Unmarshal(flow.Attribution, &attr)
+	clientState := attr.ClientState
+
 	if !flow.ExpiresAt.Time().After(time.Now().UTC()) {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	if errCode != "" {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
-		return oauthErrRedirect(flow.RedirectURI, errCode), nil
+		return oauthErrRedirect(flow.RedirectURI, errCode, clientState), nil
 	}
 	if code == "" {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 
 	web, ok := s.oauth.Providers.Web(providerName)
@@ -188,25 +195,25 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 	integName := provider.IntegrationProvider(providerName)
 	resolved, err := s.oauth.Resolver.For(ctx, flow.AppID, integName)
 	if err != nil {
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	cfg, err := provider.ParseConfig(integName, resolved.Settings, resolved.Secrets)
 	if err != nil {
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	provVerifier, err := s.oauth.Box.OpenEmbedded(flow.ProviderVerifierEnc, []byte(flow.ID.String()))
 	if err != nil {
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	callback := integration.OAuthRedirectURL(s.oauth.PublicURL, provider.IntegrationProvider(providerName))
 	ident, err := web.Exchange(ctx, cfg, code, string(provVerifier), flow.Nonce, callback)
 	if err != nil {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
 		if provider.IsEmailRequired(err) {
-			return oauthErrRedirect(flow.RedirectURI, "email_required"), nil
+			return oauthErrRedirect(flow.RedirectURI, "email_required", clientState), nil
 		}
 		slog.Warn("oauth provider exchange failed", "provider", providerName, "app_id", flow.AppID, "err", err)
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	if appleUserName != "" && ident.Name == "" {
 		ident.Name = appleUserName
@@ -215,19 +222,19 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 	app, err := s.oauth.Tenants.Get(ctx, flow.AppID)
 	if err != nil {
 		slog.Warn("oauth app load failed", "provider", providerName, "app_id", flow.AppID, "err", err)
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 	user, isNew, refRes, err := s.resolveIdentity(ctx, app, ident, flow.Attribution, flow.ReferralCode)
 	if err != nil {
 		_ = s.store.FailOAuthFlow(ctx, nil, flow.ID)
 		if errors.Is(err, ErrAccountDisabled) {
-			return oauthErrRedirect(flow.RedirectURI, "account_disabled"), nil
+			return oauthErrRedirect(flow.RedirectURI, "account_disabled", clientState), nil
 		}
 		if errors.Is(err, ErrEmailRequired) {
-			return oauthErrRedirect(flow.RedirectURI, "email_required"), nil
+			return oauthErrRedirect(flow.RedirectURI, "email_required", clientState), nil
 		}
 		slog.Warn("oauth resolve identity failed", "provider", providerName, "app_id", flow.AppID, "err", err)
-		return oauthErrRedirect(flow.RedirectURI, "access_denied"), nil
+		return oauthErrRedirect(flow.RedirectURI, "access_denied", clientState), nil
 	}
 
 	loginRaw, loginHash, err := newOpaqueToken("lc_")
@@ -241,7 +248,7 @@ func (s *Service) HandleOAuthCallback(ctx context.Context, providerName, code, s
 	if err := s.store.AuthenticateOAuthFlow(ctx, nil, flow.ID, user.ID, loginHash, outcomeJSON, db.Now()); err != nil {
 		return "", err
 	}
-	return oauthCodeRedirect(flow.RedirectURI, loginRaw), nil
+	return oauthCodeRedirect(flow.RedirectURI, loginRaw, clientState), nil
 }
 
 type oauthFlowOutcome struct {
@@ -543,24 +550,30 @@ func redirectAllowed(app tenant.App, redirectURI string) bool {
 	return false
 }
 
-func oauthErrRedirect(redirectURI, code string) string {
+func oauthErrRedirect(redirectURI, code, state string) string {
 	u, err := url.Parse(redirectURI)
 	if err != nil {
 		return redirectURI
 	}
 	q := u.Query()
 	q.Set("error", code)
+	if state != "" {
+		q.Set("state", state)
+	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }
 
-func oauthCodeRedirect(redirectURI, code string) string {
+func oauthCodeRedirect(redirectURI, code, state string) string {
 	u, err := url.Parse(redirectURI)
 	if err != nil {
 		return redirectURI
 	}
 	q := u.Query()
 	q.Set("code", code)
+	if state != "" {
+		q.Set("state", state)
+	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }

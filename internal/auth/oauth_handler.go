@@ -29,6 +29,9 @@ func (h *Handler) OAuthStart(w http.ResponseWriter, r *http.Request) {
 		method = "S256"
 	}
 	attr := map[string]any{}
+	if s := r.URL.Query().Get("state"); s != "" {
+		attr["client_state"] = s
+	}
 	if v := r.URL.Query().Get("affiliate_ref"); v != "" {
 		attr["affiliate_ref"] = v
 	}
