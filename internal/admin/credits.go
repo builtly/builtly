@@ -159,15 +159,26 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Status string `json:"status"`
+		Status   string `json:"status"`
+		Password string `json:"password"`
 	}
 	if err := httpx.DecodeJSON(r, &body); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if body.Status != auth.StatusActive && body.Status != auth.StatusDisabled {
+	if body.Status == "" && body.Password == "" {
+		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "status or password required"}))
+		return
+	}
+	if body.Status != "" && body.Status != auth.StatusActive && body.Status != auth.StatusDisabled {
 		httpx.WriteError(w, r, apperr.BadRequest.WithDetails(map[string]any{"reason": "invalid status"}))
 		return
+	}
+	if body.Password != "" {
+		if err := auth.ValidatePasswordLength(body.Password); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
 	}
 	curUser, err := h.users.GetByID(r.Context(), nil, appID, userID)
 	if err != nil {
@@ -183,18 +194,35 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := db.Now()
-	if err := h.users.UpdateStatus(r.Context(), nil, appID, userID, body.Status, now); err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			httpx.WriteError(w, r, auth.ErrUserNotFound)
+	audit := map[string]any{}
+	if body.Status != "" {
+		if err := h.users.UpdateStatus(r.Context(), nil, appID, userID, body.Status, now); err != nil {
+			if errors.Is(err, db.ErrNotFound) {
+				httpx.WriteError(w, r, auth.ErrUserNotFound)
+				return
+			}
+			httpx.WriteError(w, r, err)
 			return
 		}
-		httpx.WriteError(w, r, err)
-		return
+		if body.Status == auth.StatusDisabled {
+			_ = h.users.RevokeAllRefreshForUser(r.Context(), nil, appID, userID, now)
+		}
+		audit["status"] = body.Status
 	}
-	if body.Status == auth.StatusDisabled {
+	if body.Password != "" {
+		hash, err := auth.HashPassword(body.Password)
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		if err := h.users.UpdatePasswordHash(r.Context(), nil, appID, userID, hash, now); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
 		_ = h.users.RevokeAllRefreshForUser(r.Context(), nil, appID, userID, now)
+		audit["password"] = "reset"
 	}
-	_ = h.writeAudit(r, &appID, "user.update", "user", userID.String(), map[string]any{"status": body.Status})
+	_ = h.writeAudit(r, &appID, "user.update", "user", userID.String(), audit)
 	u, _ := h.users.GetByID(r.Context(), nil, appID, userID)
 	httpx.WriteJSON(w, http.StatusOK, u)
 }

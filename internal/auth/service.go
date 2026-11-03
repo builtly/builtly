@@ -119,14 +119,15 @@ type LoginInput struct {
 }
 
 // Register creates a password user and session.
-// Guest emails matching auth.guest_email_domain are allowed when guest login is enabled, even when regular password login is disabled.
+// Guest emails and IAP sandbox review emails are allowed even when regular password login is disabled.
 func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput) (TokenResponse, error) {
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
 		return TokenResponse{}, err
 	}
 	isGuest := app.Settings.IsGuestEmail(emailAddr)
-	if !app.Settings.Auth.PasswordEnabled && !isGuest {
+	isSandboxReviewer := app.Settings.SandboxEmailAllowed(emailAddr)
+	if !app.Settings.Auth.PasswordEnabled && !isGuest && !isSandboxReviewer {
 		return TokenResponse{}, ErrPasswordDisabled
 	}
 	if err := ValidatePasswordLength(in.Password); err != nil {
@@ -155,8 +156,8 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			Status: StatusActive, Attribution: attr, ReferralCode: &code,
 			CreatedAt: now, UpdatedAt: now,
 		}
-		if isGuest {
-			// Guest accounts have verified email automatically (no email token/verification needed)
+		if isGuest || isSandboxReviewer {
+			// Guest and review accounts are verified without an email token.
 			u.EmailVerifiedAt = db.NullTime{Time: now, Valid: true}
 		}
 		if err := s.store.Insert(ctx, tx, u); err != nil {
@@ -177,7 +178,7 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			}
 		}
 
-		if !isGuest {
+		if !isGuest && !isSandboxReviewer {
 			verifyRaw, verifyHash, err := newEmailTokenRaw()
 			if err != nil {
 				return err
@@ -204,8 +205,14 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			if err := s.publishWelcome(ctx, tx, app, emailAddr); err != nil {
 				return err
 			}
-		} else if err := s.publishRegistered(ctx, tx, app.ID, uid, "guest"); err != nil {
-			return err
+		} else {
+			regMethod := MethodPassword
+			if isGuest {
+				regMethod = "guest"
+			}
+			if err := s.publishRegistered(ctx, tx, app.ID, uid, regMethod); err != nil {
+				return err
+			}
 		}
 
 		tr, err := s.issueSessionTx(ctx, tx, app, u, MethodPassword, in.UserAgent, in.IP, true)
@@ -226,7 +233,8 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 }
 
 // Login authenticates email/password.
-// Guest emails matching auth.guest_email_domain are allowed when guest login is enabled, even when regular password login is disabled.
+// Guest emails and IAP sandbox review emails are allowed even when regular password login is disabled.
+// A missing sandbox review email is created on first successful password login.
 func (s *Service) Login(ctx context.Context, app tenant.App, in LoginInput) (TokenResponse, error) {
 	emailAddr, err := normalizeEmail(in.Email)
 	if err != nil {
@@ -234,11 +242,18 @@ func (s *Service) Login(ctx context.Context, app tenant.App, in LoginInput) (Tok
 		_, _ = VerifyPassword(in.Password, dummyHash)
 		return TokenResponse{}, ErrInvalidCredentials
 	}
-	if !app.Settings.Auth.PasswordEnabled && !app.Settings.IsGuestEmail(emailAddr) {
+	sandboxReviewer := app.Settings.SandboxEmailAllowed(emailAddr)
+	if !app.Settings.Auth.PasswordEnabled && !app.Settings.IsGuestEmail(emailAddr) && !sandboxReviewer {
 		return TokenResponse{}, ErrPasswordDisabled
 	}
 	u, err := s.store.GetByEmail(ctx, nil, app.ID, emailAddr)
 	if err != nil {
+		if sandboxReviewer && errors.Is(err, db.ErrNotFound) {
+			return s.Register(ctx, app, RegisterInput{
+				Email: emailAddr, Password: in.Password, DisplayName: "App Review",
+				UserAgent: in.UserAgent, IP: in.IP,
+			})
+		}
 		_, _ = VerifyPassword(in.Password, dummyHash)
 		return TokenResponse{}, ErrInvalidCredentials
 	}
@@ -253,7 +268,7 @@ func (s *Service) Login(ctx context.Context, app tenant.App, in LoginInput) (Tok
 	if !ok {
 		return TokenResponse{}, ErrInvalidCredentials
 	}
-	if app.Settings.Auth.RequireEmailVerification && !u.EmailVerifiedAt.Valid {
+	if app.Settings.Auth.RequireEmailVerification && !u.EmailVerifiedAt.Valid && !sandboxReviewer {
 		return TokenResponse{}, ErrEmailNotVerified
 	}
 	if needsRehash {

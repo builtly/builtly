@@ -736,6 +736,29 @@ func TestAuthServiceTTLAndPasswordDisabled(t *testing.T) {
 	if login.Tokens.AccessToken == "" {
 		t.Fatal("expected guest login access token")
 	}
+
+	// IAP sandbox review emails can auto-provision on first password login even when password auth is disabled
+	// and email verification is required.
+	disabled.Settings.Auth.RequireEmailVerification = true
+	disabled.Settings.IAPSandboxEmails = []string{"reviewer@example.com"}
+	revLogin, err := h.authSvc.Login(context.Background(), disabled, auth.LoginInput{
+		Email: "Reviewer@Example.com", Password: "reviewpassword123",
+	})
+	if err != nil {
+		t.Fatalf("sandbox reviewer first login: %v", err)
+	}
+	if !revLogin.IsNewUser || !revLogin.User.EmailVerified || revLogin.User.DisplayName != "App Review" {
+		t.Fatalf("unexpected reviewer user: %+v isNew=%v", revLogin.User, revLogin.IsNewUser)
+	}
+	revLogin2, err := h.authSvc.Login(context.Background(), disabled, auth.LoginInput{
+		Email: "reviewer@example.com", Password: "reviewpassword123",
+	})
+	if err != nil {
+		t.Fatalf("sandbox reviewer second login: %v", err)
+	}
+	if revLogin2.IsNewUser || revLogin2.User.ID != revLogin.User.ID {
+		t.Fatalf("unexpected second reviewer login: %+v", revLogin2)
+	}
 }
 
 func TestStartOAuthValidation(t *testing.T) {

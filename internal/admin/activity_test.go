@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/builtly/builtly/internal/auth"
 	"github.com/builtly/builtly/internal/billing"
 	"github.com/builtly/builtly/internal/catalog"
 	"github.com/builtly/builtly/internal/credit"
@@ -137,6 +138,30 @@ func TestAdminActivityListsPurchasesAndLedger(t *testing.T) {
 	rr = do("GET", "/api/v1/admin/apps/"+appID.String()+"/ledger?entry_type=not_a_type", nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("bad entry type: %d %s", rr.Code, rr.Body.String())
+	}
+
+	userPath := "/api/v1/admin/apps/" + appID.String() + "/users/" + userID.String()
+	if rr := do("PATCH", userPath, map[string]any{}); rr.Code != http.StatusBadRequest {
+		t.Fatalf("empty patch want 400, got %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := do("PATCH", userPath, map[string]any{"password": "short"}); rr.Code != http.StatusBadRequest {
+		t.Fatalf("short password want 400, got %d %s", rr.Code, rr.Body.String())
+	}
+	newPW := "new_admin_set_pw_99"
+	rr = do("PATCH", userPath, map[string]any{"password": newPW})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set password: %d %s", rr.Code, rr.Body.String())
+	}
+	u, err := auth.NewStore(database).GetByID(t.Context(), nil, appID, userID)
+	if err != nil || u.PasswordHash == nil {
+		t.Fatalf("get user: %v hash=%v", err, u.PasswordHash)
+	}
+	if ok, _ := auth.VerifyPassword(newPW, *u.PasswordHash); !ok {
+		t.Fatal("VerifyPassword failed after admin password update")
+	}
+	auditRR := do("GET", "/api/v1/admin/audit-log?action=user.update", nil)
+	if auditRR.Code != http.StatusOK || strings.Contains(auditRR.Body.String(), newPW) {
+		t.Fatalf("audit leaked password or failed: %d %s", auditRR.Code, auditRR.Body.String())
 	}
 }
 

@@ -18,6 +18,7 @@ Open-source multi-tenant SaaS backend for apps and static sites — Authenticati
   - Email + Password with secure token rotation, email verification, and password resets.
   - OAuth (Google, GitHub, Apple) with PKCE and mobile native Apple/Google Sign-In.
   - **Guest / Device Accounts**: Dedicated guest accounts (e.g. `guest_<deviceId>@<domain>`) with registration bonus guards and anti-bounce protections.
+  - **App Review / IAP Sandbox Accounts**: Tester emails listed in `iap_sandbox_emails` can register or sign in with email/password (auto-provisioning and auto-verifying on first login) even when regular password login is disabled.
 - **Billing & Monetization**:
   - **Stripe Checkout**: One-time credit packs and webhook lifecycle (`checkout.session.completed`, refunds, dispute chargebacks). Subscriptions and recurring plans are not in v1.
   - **Native Mobile IAP**: Apple App Store Server API (JWS transactions) & Google Play Developer API with receipt verification, anti-double-spend claim checks, and refund clawback poller.
@@ -33,7 +34,7 @@ Open-source multi-tenant SaaS backend for apps and static sites — Authenticati
   - Built-in referral codes, signup referee bonus credits, and reward attribution on purchases.
   - Transactional outbox event dispatcher publishing server-side lifecycle facts (`user_signed_up`, `user_logged_in`, `checkout_session_created`, `purchase_completed`, `purchase_refunded`, `credits_consumed`, `guest_credits_transferred`, `file_uploaded`) to PostHog and external affiliate platforms (PromoteKit, Affonso). Deliveries skip safely when analytics keys are not configured.
 - **Industrial Admin Dashboard**:
-  - Built-in browser management UI (`/admin/`) with dark/light themes, real-time analytics, audit logging, outbox queue inspector, connection secret vault, and visual app settings.
+  - Built-in browser management UI (`/admin/`) with dark/light themes, real-time analytics, user status & password management, audit logging, outbox queue inspector, connection secret vault, and visual app settings.
 
 ---
 
@@ -83,8 +84,8 @@ All client requests under `/api/v1/*` (except provider webhooks and OAuth redire
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/v1/auth/config` | Public app configuration (auth methods, client IDs, guest domain, quotas) |
-| `POST` | `/api/v1/auth/register` | Register with email/password (auto-skips bonuses & verification if guest) |
-| `POST` | `/api/v1/auth/login` | Password login, issues short-lived access JWT + refresh token |
+| `POST` | `/api/v1/auth/register` | Register with email/password (auto-verifies guest & sandbox review accounts) |
+| `POST` | `/api/v1/auth/login` | Password login (auto-provisions missing sandbox review accounts), issues short-lived access JWT + refresh token |
 | `POST` | `/api/v1/auth/refresh` | Rotate refresh token family and get a new access token |
 | `POST` | `/api/v1/auth/logout` | Revoke active refresh token family |
 | `GET` | `/api/v1/auth/oauth/{provider}` | Start web OAuth PKCE flow (Google, GitHub, Apple) |

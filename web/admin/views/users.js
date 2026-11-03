@@ -306,6 +306,22 @@ export async function renderUserDetail(el, appID, userID) {
       </div>
     </section>
 
+    ${user.status !== "deleted" ? `
+    <article class="user-adjust">
+      <div class="user-adjust__head">
+        <h2>Set password</h2>
+        <span class="user-adjust__badge">admin</span>
+      </div>
+      <form id="set-password">
+        <div class="form-row">
+          <div class="field"><label>New password</label><input name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+        </div>
+        <div class="form-actions">
+          <button type="submit">Save password</button>
+        </div>
+      </form>
+    </article>` : ""}
+
     <article class="user-adjust">
       <div class="user-adjust__head">
         <h2>Adjust credits</h2>
@@ -355,6 +371,18 @@ export async function renderUserDetail(el, appID, userID) {
       <tbody>${ledgerRows}</tbody>
     </table>
     </div>`;
+
+  const passwordForm = el.querySelector("#set-password");
+  if (passwordForm) {
+    passwordForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const password = new FormData(passwordForm).get("password");
+      if (!password || !confirm("Replace this user's password? Existing sessions will be signed out.")) return;
+      await api("PATCH", base, { password });
+      passwordForm.reset();
+      showOk("Password updated");
+    });
+  }
 
   const toggleBtn = el.querySelector("#toggle-status");
   if (toggleBtn) {
