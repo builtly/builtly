@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"path"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/builtly/builtly/internal/integration"
+	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/platform/httpx"
 	"github.com/builtly/builtly/internal/tenant"
@@ -23,6 +25,7 @@ type Service struct {
 	store        *Store
 	resolver     *integration.Resolver
 	r2           *R2Client
+	outbox       *outbox.Publisher
 	now          func() time.Time
 	testEndpoint string // tests only
 }
@@ -34,6 +37,9 @@ func NewService(database *db.DB, store *Store, resolver *integration.Resolver, r
 
 // Store exposes the file store (auth delete hook).
 func (s *Service) Store() *Store { return s.store }
+
+// SetPublisher wires analytics events for completed uploads. Nil skips them.
+func (s *Service) SetPublisher(pub *outbox.Publisher) { s.outbox = pub }
 
 // CreateInput is POST /files.
 type CreateInput struct {
@@ -148,6 +154,7 @@ func (s *Service) Complete(ctx context.Context, app tenant.App, userID, fileID u
 	}
 	f.Status = StatusUploaded
 	f.UploadedAt = db.NullTime{Time: now, Valid: true}
+	s.publishUploaded(ctx, f)
 	return f, nil
 }
 
@@ -423,7 +430,32 @@ func (s *Service) CompleteAvatar(ctx context.Context, app tenant.App, userID, fi
 	if err != nil {
 		return "", err
 	}
+	f.Status = StatusUploaded
+	s.publishUploaded(ctx, f)
 	return publicURL, nil
+}
+
+func (s *Service) publishUploaded(ctx context.Context, f File) {
+	if s.outbox == nil || s.db == nil {
+		return
+	}
+	kind := "file"
+	if strings.Contains(f.ObjectKey, "/avatar/") {
+		kind = "avatar"
+	}
+	payload, err := json.Marshal(map[string]any{
+		"user_id": f.UserID.String(), "content_type": f.ContentType,
+		"size_bytes": f.SizeBytes, "kind": kind,
+	})
+	if err != nil {
+		return
+	}
+	appID := f.AppID
+	if err := s.outbox.Publish(ctx, s.db, outbox.Event{
+		AppID: &appID, Type: outbox.EventFileUploaded, Payload: payload,
+	}); err != nil {
+		slog.Warn("analytics publish failed", "event", outbox.EventFileUploaded, "err", err)
+	}
 }
 
 func allowedType(allow []string, ct string) bool {

@@ -111,7 +111,32 @@ func mapEvent(eventType string, raw []byte) (event, distinct string, props map[s
 	_ = json.Unmarshal(raw, &m)
 	switch eventType {
 	case outbox.EventUserRegistered:
-		return "user_signed_up", str(m["user_id"]), map[string]any{}, m["user_id"] != nil
+		props = methodProps(m)
+		return "user_signed_up", str(m["user_id"]), props, m["user_id"] != nil
+	case outbox.EventUserLoggedIn:
+		props = methodProps(m)
+		return "user_logged_in", str(m["user_id"]), props, m["user_id"] != nil
+	case outbox.EventGuestCreditsTransferred:
+		return "guest_credits_transferred", str(m["user_id"]), map[string]any{
+			"guest_user_id": str(m["guest_user_id"]),
+			"credits":       m["credits"],
+		}, m["user_id"] != nil
+	case outbox.EventCheckoutSessionCreated:
+		return "checkout_session_created", str(m["user_id"]), map[string]any{
+			"product_id":  str(m["product_id"]),
+			"product_sku": str(m["product_sku"]),
+			"credits":     m["credits"],
+			"amount":      m["amount"],
+			"currency":    str(m["currency"]),
+			"environment": str(m["environment"]),
+			"provider":    "stripe",
+		}, m["user_id"] != nil
+	case outbox.EventFileUploaded:
+		return "file_uploaded", str(m["user_id"]), map[string]any{
+			"content_type": str(m["content_type"]),
+			"size_bytes":   m["size_bytes"],
+			"kind":         str(m["kind"]),
+		}, m["user_id"] != nil
 	case outbox.EventPurchaseCompleted:
 		referred, _ := m["referred"].(bool)
 		props = map[string]any{
@@ -150,6 +175,17 @@ func mapEvent(eventType string, raw []byte) (event, distinct string, props map[s
 	default:
 		return "", "", nil, false
 	}
+}
+
+func methodProps(m map[string]any) map[string]any {
+	method := str(m["method"])
+	if method == "" {
+		method = str(m["provider"])
+	}
+	if method == "" {
+		return map[string]any{}
+	}
+	return map[string]any{"method": method}
 }
 
 func str(v any) string {

@@ -1182,6 +1182,10 @@ outbox.PublishTx(ctx, tx, outbox.Event{AppID: app.ID, Type: "purchase.completed"
 | `referral.rewarded` | `analytics` (`referral_rewarded`) |
 | `credits.consumed` | `analytics` (`credits_consumed`) — published only if `analytics.capture_consume_events` |
 | `user.deleted` | `auth.apple_revoke`, `storage.purge`, `analytics` (`user_deleted`) |
+| `user.logged_in` | `analytics` (`user_logged_in`, `method`) — returning sessions only; not refresh |
+| `guest.credits_transferred` | `analytics` (`guest_credits_transferred`) |
+| `checkout.session_created` | `analytics` (`checkout_session_created`) — Stripe session created, not yet paid |
+| `file.uploaded` | `analytics` (`file_uploaded`) |
 
 **Dispatcher** (each instance, loop):
 
@@ -1208,6 +1212,8 @@ RETURNING id, app_id, event_type, subscriber, payload_enc, attempts;
 - `POST {host}/i/v0/e/` (or `/capture/`, ⚠ verify current preferred path) with `{api_key, event, distinct_id, properties, timestamp, uuid}`; `uuid` = deterministic UUID from the outbox ID so retries dedupe.
 - `distinct_id` = Builtly `user_id`; clients SHOULD call `posthog.identify(user_id)` after sign-in so client and server events merge.
 - Properties always include `app_id`, `$lib: "builtly"`; purchase events add `product_sku`, `credits`, `amount`, `currency`, `provider`, `environment`, `affiliate_ref`, `referred` (bool). Never include email or tokens.
+- No project API key, or no analytics connection bound → subscriber returns `ErrNotConfigured` and the row is `skipped`. It does not call the provider.
+- Server events are facts that committed in Builtly (signup, login, checkout session, purchase, refund, credit consume, guest transfer, file upload). Page views, exposes, and clicks stay on the client SDK. Clients must not re-send the server events.
 
 **Affiliates** (`internal/affiliate`) — PromoteKit and Affonso, selected per app by `settings.affiliate.provider`.
 

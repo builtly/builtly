@@ -18,13 +18,17 @@ const (
 
 // Common event types.
 const (
-	EventUserRegistered    = "user.registered"
-	EventEmailRequested    = "email.requested"
-	EventPurchaseCompleted = "purchase.completed"
-	EventPurchaseRefunded  = "purchase.refunded"
-	EventReferralRewarded  = "referral.rewarded"
-	EventCreditsConsumed   = "credits.consumed"
-	EventUserDeleted       = "user.deleted"
+	EventUserRegistered          = "user.registered"
+	EventEmailRequested          = "email.requested"
+	EventPurchaseCompleted       = "purchase.completed"
+	EventPurchaseRefunded        = "purchase.refunded"
+	EventReferralRewarded        = "referral.rewarded"
+	EventCreditsConsumed         = "credits.consumed"
+	EventUserDeleted             = "user.deleted"
+	EventUserLoggedIn            = "user.logged_in"
+	EventGuestCreditsTransferred = "guest.credits_transferred"
+	EventCheckoutSessionCreated  = "checkout.session_created"
+	EventFileUploaded            = "file.uploaded"
 )
 
 // Subscriber names.

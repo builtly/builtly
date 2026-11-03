@@ -332,6 +332,12 @@ Gate private pages in JS: if `!getAccess()`, redirect to login. Jekyll cannot en
 | `integration_not_configured` | Stripe (or other) connection not bound on the app |
 | `insufficient_credits` | Need purchase or admin adjust |
 
+## Analytics
+
+Business facts are emitted by Builtly, not by the page. Do not capture `user_signed_up`, `user_logged_in`, `checkout_session_created`, `purchase_completed`, `purchase_refunded`, `credits_consumed`, `guest_credits_transferred`, or `file_uploaded` from Jekyll — they will double-count, and a closed tab would miss the ones that happen after redirect.
+
+The page owns events with no committed backend row: `$pageview`, paywall or module expose, and clicks that happen before an API call. After login, guest registration, or OAuth callback, call `posthog.identify(user.id)` (or the equivalent `user_id` on another analytics SDK) so those client events join the server events. Call `reset` on logout. If the app has no analytics connection or API key, Builtly skips delivery; the site can still load its own SDK or not.
+
 ## See also
 
 - [`architecture.md`](architecture.md) §1.2 (tenancy / CORS), §3.2 (auth flows), §4 (endpoint contracts)

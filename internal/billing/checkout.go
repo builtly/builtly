@@ -11,6 +11,7 @@ import (
 
 	"github.com/builtly/builtly/internal/auth"
 	"github.com/builtly/builtly/internal/integration"
+	"github.com/builtly/builtly/internal/outbox"
 	"github.com/builtly/builtly/internal/platform/db"
 	"github.com/builtly/builtly/internal/tenant"
 )
@@ -124,6 +125,11 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, app tenant.App, user
 	if err := s.store.UpdatePurchaseAfterSession(ctx, nil, app.ID, purchaseID, session.ID, StatusPending, db.Now()); err != nil {
 		return CheckoutResult{}, err
 	}
+	s.publishAnalytics(ctx, app.ID, outbox.EventCheckoutSessionCreated, map[string]any{
+		"user_id": userID.String(), "product_id": product.ID.String(), "product_sku": product.SKU,
+		"credits": product.Credits, "amount": product.PriceAmount, "currency": product.Currency,
+		"environment": env,
+	})
 	return CheckoutResult{PurchaseID: purchaseID, SessionID: session.ID, CheckoutURL: session.URL}, nil
 }
 

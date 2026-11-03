@@ -32,6 +32,10 @@ func (r *Registry) DefaultSubscriptions() {
 	r.Subscribe(EventReferralRewarded, SubAnalytics)
 	r.Subscribe(EventCreditsConsumed, SubAnalytics)
 	r.Subscribe(EventUserDeleted, SubAppleRevoke, SubStoragePurge, SubAnalytics)
+	r.Subscribe(EventUserLoggedIn, SubAnalytics)
+	r.Subscribe(EventGuestCreditsTransferred, SubAnalytics)
+	r.Subscribe(EventCheckoutSessionCreated, SubAnalytics)
+	r.Subscribe(EventFileUploaded, SubAnalytics)
 }
 
 // Subscribe adds subscriber names for an event type (publish-time fan-out).

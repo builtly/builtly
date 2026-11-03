@@ -239,6 +239,7 @@ func runApp(runCtx context.Context, cfg *config.Config, log *slog.Logger) int {
 	billingSvc.SetIAP(appstore.NewClient(hc, appleVerifier), playstore.New(hc), billing.NewJobStore(database), log)
 	billingSvc.SetAffiliate(affReg)
 	storageSvc := storage.NewService(database, storage.NewStore(database), resolver, storage.NewR2Client(hc))
+	storageSvc.SetPublisher(publisher)
 	authSvc.SetFileMarker(storageSvc)
 	authSvc.SetAvatarUploader(auth.StorageAvatars{Storage: storageSvc})
 	registry.SetHandler(outbox.SubStoragePurge, storage.NewPurgeSubscriber(storageSvc, log).Handle)

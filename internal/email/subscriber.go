@@ -24,6 +24,7 @@ type Payload struct {
 	ActionURL      string         `json:"action_url,omitempty"`
 	Expiry         string         `json:"expiry,omitempty"`
 	PasswordSignup bool           `json:"password_signup,omitempty"` // for user.registered
+	Method         string         `json:"method,omitempty"`          // analytics only; ignored by mail
 	Variables      map[string]any `json:"variables,omitempty"`
 }
 

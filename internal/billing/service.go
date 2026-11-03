@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -23,21 +24,21 @@ import (
 
 // Service owns checkout, webhooks, and refunds.
 type Service struct {
-	db       *db.DB
-	store    *Store
-	catalog  *catalog.Service
-	credits  *credit.Service
-	outbox   *outbox.Publisher
-	resolver *integration.Resolver
-	integ    *integration.Service
-	iStore   *integration.Store
-	box      *secrets.Box
-	users    *auth.Store
+	db         *db.DB
+	store      *Store
+	catalog    *catalog.Service
+	credits    *credit.Service
+	outbox     *outbox.Publisher
+	resolver   *integration.Resolver
+	integ      *integration.Service
+	iStore     *integration.Store
+	box        *secrets.Box
+	users      *auth.Store
 	authTokens *auth.TokenService
-	tenants  *tenant.Service
-	stripe   *stripeapi.Client
-	devHTTP  bool // allow http://localhost* checkout URLs
-	iap      iapDeps
+	tenants    *tenant.Service
+	stripe     *stripeapi.Client
+	devHTTP    bool // allow http://localhost* checkout URLs
+	iap        iapDeps
 	// AffiliateFields merges provider-specific Stripe Checkout form fields (optional).
 	AffiliateFields func(app tenant.App, affiliateRef string) map[string]string
 }
@@ -75,6 +76,41 @@ func (s *Service) SetAuthTokens(tokens *auth.TokenService) {
 
 // Store exposes the purchase store for admin listing.
 func (s *Service) Store() *Store { return s.store }
+
+func (s *Service) publishGuestTransfer(ctx context.Context, tx *sqlx.Tx, appID, formalUserID, guestUserID uuid.UUID, credits int64) error {
+	if s.outbox == nil {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]any{
+		"user_id":       formalUserID.String(),
+		"guest_user_id": guestUserID.String(),
+		"credits":       credits,
+	})
+	if err != nil {
+		return err
+	}
+	return s.outbox.PublishTx(ctx, tx, outbox.Event{
+		AppID: &appID, Type: outbox.EventGuestCreditsTransferred, Payload: payload,
+	})
+}
+
+// publishAnalytics records a fact after the business write has committed.
+// A missing analytics key is skipped later by the subscriber; a publish failure must not fail the user action.
+func (s *Service) publishAnalytics(ctx context.Context, appID uuid.UUID, eventType string, fields map[string]any) {
+	if s.outbox == nil || s.db == nil {
+		return
+	}
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		return
+	}
+	appCopy := appID
+	if err := s.outbox.Publish(ctx, s.db, outbox.Event{
+		AppID: &appCopy, Type: eventType, Payload: payload,
+	}); err != nil {
+		slog.Warn("analytics publish failed", "event", eventType, "err", err)
+	}
+}
 
 // SetAffiliate wires PromoteKit/Affonso checkout field helpers.
 func (s *Service) SetAffiliate(reg *affiliate.Registry) {

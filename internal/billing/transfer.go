@@ -207,6 +207,9 @@ func (s *Service) TransferGuestCredits(ctx context.Context, app tenant.App, form
 			if err := s.credits.Store().InsertEntry(ctx, tx, inEntry); err != nil {
 				return err
 			}
+			if err := s.publishGuestTransfer(ctx, tx, app.ID, formalUserID, guestUserID, creditsToTransfer); err != nil {
+				return err
+			}
 
 			res = TransferGuestCreditsResult{
 				TransferredCredits: creditsToTransfer,

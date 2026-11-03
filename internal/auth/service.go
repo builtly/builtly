@@ -204,6 +204,8 @@ func (s *Service) Register(ctx context.Context, app tenant.App, in RegisterInput
 			if err := s.publishWelcome(ctx, tx, app, emailAddr); err != nil {
 				return err
 			}
+		} else if err := s.publishRegistered(ctx, tx, app.ID, uid, "guest"); err != nil {
+			return err
 		}
 
 		tr, err := s.issueSessionTx(ctx, tx, app, u, MethodPassword, in.UserAgent, in.IP, true)
@@ -679,6 +681,11 @@ func (s *Service) issueSessionTx(ctx context.Context, tx *sqlx.Tx, app tenant.Ap
 		return TokenResponse{}, err
 	}
 	_ = s.store.TouchLastLogin(ctx, tx, app.ID, u.ID, ip, db.Time(now))
+	if !isNew {
+		if err := s.publishLoggedIn(ctx, tx, app, u, method); err != nil {
+			return TokenResponse{}, err
+		}
+	}
 	return TokenResponse{
 		User:      toPublicUser(u),
 		IsNewUser: isNew,
@@ -687,6 +694,40 @@ func (s *Service) issueSessionTx(ctx context.Context, tx *sqlx.Tx, app tenant.Ap
 			RefreshToken: raw, RefreshExpiresIn: int64(s.refreshTTL.Seconds()),
 		},
 	}, nil
+}
+
+func (s *Service) publishRegistered(ctx context.Context, tx *sqlx.Tx, appID, userID uuid.UUID, method string) error {
+	if s.outbox == nil {
+		return nil
+	}
+	payload, err := json.Marshal(map[string]any{
+		"user_id": userID.String(), "password_signup": false, "method": method,
+	})
+	if err != nil {
+		return err
+	}
+	return s.outbox.PublishTx(ctx, tx, outbox.Event{
+		AppID: &appID, Type: outbox.EventUserRegistered, Payload: payload,
+	})
+}
+
+func (s *Service) publishLoggedIn(ctx context.Context, tx *sqlx.Tx, app tenant.App, u User, method string) error {
+	if s.outbox == nil {
+		return nil
+	}
+	if u.Email != nil && app.Settings.IsGuestEmail(*u.Email) {
+		method = "guest"
+	}
+	payload, err := json.Marshal(map[string]any{
+		"user_id": u.ID.String(), "method": method,
+	})
+	if err != nil {
+		return err
+	}
+	appID := app.ID
+	return s.outbox.PublishTx(ctx, tx, outbox.Event{
+		AppID: &appID, Type: outbox.EventUserLoggedIn, Payload: payload,
+	})
 }
 
 func (s *Service) loadEmailToken(ctx context.Context, appID uuid.UUID, raw, purpose string) (EmailToken, error) {
@@ -738,6 +779,7 @@ func buildUserRegisteredPayload(app tenant.App, userID uuid.UUID, to, verifyRaw 
 		ActionURL:      actionURL(app, "verify", verifyRaw),
 		Expiry:         expiry.UTC().Format(time.RFC3339),
 		PasswordSignup: true,
+		Method:         MethodPassword,
 	}
 	return json.Marshal(p)
 }
