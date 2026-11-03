@@ -18,9 +18,10 @@ Open-source multi-tenant SaaS backend for apps and static sites — Authenticati
   - Email + Password with secure token rotation, email verification, and password resets.
   - OAuth (Google, GitHub, Apple) with PKCE and mobile native Apple/Google Sign-In.
   - **Guest / Device Accounts**: Dedicated guest accounts (e.g. `guest_<deviceId>@<domain>`) with registration bonus guards and anti-bounce protections.
-- **Billing & Subscriptions**:
-  - **Stripe Checkout**: One-time credit packs and webhook lifecycle (`checkout.session.completed`, refunds, dispute chargebacks).
+- **Billing & Monetization**:
+  - **Stripe Checkout**: One-time credit packs and webhook lifecycle (`checkout.session.completed`, refunds, dispute chargebacks). Subscriptions and recurring plans are not in v1.
   - **Native Mobile IAP**: Apple App Store Server API (JWS transactions) & Google Play Developer API with receipt verification, anti-double-spend claim checks, and refund clawback poller.
+  - **IAP Sandbox Governance**: Test apps accept all sandbox/test purchases with optional account tokens. Production apps reject sandbox by default and allow only designated tester emails with a required store account token (`appAccountToken` / `obfuscatedExternalAccountId`).
   - **Guest Credits Transfer**: Atomic, idempotent migration (`POST /billing/transfer-guest-credits`) moving remaining guest balance and IAP purchase history to authenticated accounts upon login.
 - **AI Gateway & Credit Metering**:
   - OpenAI-compatible chat completions proxy (`POST /ai/chat/completions`) routing to upstream providers (OpenAI, Anthropic, DeepSeek, Grok, etc.).
@@ -28,9 +29,9 @@ Open-source multi-tenant SaaS backend for apps and static sites — Authenticati
   - Strict append-only credit ledger (`credit_balances` & `credit_ledger`) ensuring balance invariants hold under high concurrency.
 - **Object Storage**:
   - Cloudflare R2 integration with presigned direct uploads, user quota tracking, and automatic avatar processing.
-- **Growth & Referrals**:
+- **Growth & Telemetry**:
   - Built-in referral codes, signup referee bonus credits, and reward attribution on purchases.
-  - First-party webhooks and outbox event dispatcher (Resend transactional emails, PostHog, PromoteKit, Affonso).
+  - Transactional outbox event dispatcher publishing server-side lifecycle facts (`user_signed_up`, `user_logged_in`, `checkout_session_created`, `purchase_completed`, `purchase_refunded`, `credits_consumed`, `guest_credits_transferred`, `file_uploaded`) to PostHog and external affiliate platforms (PromoteKit, Affonso). Deliveries skip safely when analytics keys are not configured.
 - **Industrial Admin Dashboard**:
   - Built-in browser management UI (`/admin/`) with dark/light themes, real-time analytics, audit logging, outbox queue inspector, connection secret vault, and visual app settings.
 
@@ -150,6 +151,22 @@ Builtly provides a first-class guest account migration workflow. Enable **guest 
              ├─ Reassigns IAP purchase history (enables correct refund clawbacks).
              └─ Subsequent transfer calls return 200 with already_transferred: true.
 ```
+
+---
+
+## Analytics & Tracking Architecture
+
+Builtly follows a strict **backend for business facts, client for UI interactions** telemetry model:
+
+| Layer | Responsibility | Typical Events | Mechanism |
+|---|---|---|---|
+| **Builtly (Server)** | Committed mutations & financial state changes | `user_signed_up`, `user_logged_in`, `checkout_session_created`, `purchase_completed`, `purchase_refunded`, `credits_consumed`, `guest_credits_transferred`, `file_uploaded` | Transactional outbox worker, deduplicated by outbox UUID, `distinct_id = user_id`. Safe no-op if no analytics key is configured. |
+| **Web / Mobile Client** | UI impressions, user intent, client-side dropped flows | `$pageview`, paywall exposure, `checkout_clicked`, native sheet cancelled, network timeouts | Direct calls to client SDKs (PostHog, GA4, Firebase). |
+
+**Identity Stitching Guideline**:
+1. Before authentication or guest creation, the client SDK uses its own anonymous identifier.
+2. Once an account is established (formal sign-in, OAuth, or automated guest registration), client apps call `identify(user.id)` using the Builtly user UUID to unify client impressions with server-side transactions.
+3. Call `reset()` on logout. Do not duplicate server-side lifecycle events from front-end code.
 
 ---
 
