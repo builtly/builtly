@@ -201,9 +201,9 @@ function switchApp(parts, appID) {
     return;
   }
   setCurrentAppID(appID);
-  // Prefer keeping the current app section; from platform pages open Integrations.
-  let section = "config";
-  if (parts[0] === "apps" && parts[1]) section = sectionFromParts(parts);
+  // Keep the current app section when already inside an app. From All apps
+  // and other platform pages, open Overview — the sidebar highlights that item.
+  const section = parts[0] === "apps" && parts[1] ? sectionFromParts(parts) : "overview";
   location.hash = hashForApp(appID, section);
 }
 

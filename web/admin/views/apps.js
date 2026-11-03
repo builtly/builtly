@@ -79,7 +79,7 @@ export async function renderAppsList(el) {
     <tr class="apps-row" data-reveal="${i}">
       <td class="user-idx" aria-hidden="true">${String(i + 1).padStart(2, "0")}</td>
       <td>
-        <a class="apps-identity" href="#/apps/${esc(a.id)}/config">
+        <a class="apps-identity" href="#/apps/${esc(a.id)}">
           <span class="apps-identity__name">${esc(a.name)}</span>
           <span class="apps-identity__slug">${esc(a.slug)}</span>
         </a>
@@ -88,7 +88,7 @@ export async function renderAppsList(el) {
       <td class="apps-id" title="${esc(a.id)}">${esc(a.id)}</td>
       <td class="user-when">${esc(fmtTime(a.created_at))}</td>
       <td class="apps-actions">
-        <a class="apps-open" href="#/apps/${esc(a.id)}/config">Open</a>
+        <a class="apps-open" href="#/apps/${esc(a.id)}">Open</a>
       </td>
     </tr>`).join("") || `<tr><td colspan="6" class="empty user-empty-row">No apps yet — create one to get started.</td></tr>`;
 
@@ -141,7 +141,7 @@ export async function renderAppsList(el) {
     clearAppsCache();
     setCurrentAppID(app.id);
     showOk("Created " + app.slug);
-    location.hash = "#/apps/" + app.id + "/config";
+    location.hash = "#/apps/" + app.id;
   });
 }
 
