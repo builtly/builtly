@@ -565,3 +565,53 @@ func TestStripeRefunds(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func TestStripeRestrictedKeyCreateAndPatch(t *testing.T) {
+	h := setupStripe(t)
+
+	// Create with rk_test_ and omitted livemode → infers livemode=false and trims secret.
+	body, _ := json.Marshal(map[string]any{
+		"provider": "stripe", "name": "rk-conn",
+		"settings": map[string]any{},
+		"secrets":  map[string]any{"secret_key": "  rk_test_1234567890  ", "webhook_secrets": []string{"  " + whsec + "  "}},
+	})
+	req := httptest.NewRequest("POST", "/api/v1/admin/connections", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("create rk_test: %d %s", rr.Code, rr.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &created)
+	connID := created["id"].(string)
+	st := created["settings"].(map[string]any)
+	if st["livemode"] != false {
+		t.Fatalf("want livemode=false, got %#v", st)
+	}
+	sec := created["secrets"].(map[string]any)
+	if !strings.HasPrefix(sec["secret_key"].(string), "rk_test_") {
+		t.Fatalf("want rk_test_ prefix in masked secret, got %#v", sec)
+	}
+
+	// Rotate to rk_live_ via PATCH without specifying livemode → infers livemode=true.
+	patchBody, _ := json.Marshal(map[string]any{
+		"secrets": map[string]any{"secret_key": "rk_live_9876543210"},
+	})
+	req = httptest.NewRequest("PATCH", "/api/v1/admin/connections/"+connID, bytes.NewReader(patchBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("patch rk_live: %d %s", rr.Code, rr.Body.String())
+	}
+	var updated map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &updated)
+	st = updated["settings"].(map[string]any)
+	if st["livemode"] != true {
+		t.Fatalf("want livemode=true after rotating to rk_live_, got %#v", st)
+	}
+}
+

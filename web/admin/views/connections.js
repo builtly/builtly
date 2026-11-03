@@ -7,10 +7,10 @@ const SCHEMAS = {
   stripe: {
     label: "Stripe",
     settings: [
-      { key: "livemode", label: "Live mode", type: "checkbox", hint: "Must match sk_live_ / sk_test_. account_id is filled automatically." },
+      { key: "livemode", label: "Mode", type: "mode_tag", hint: "Inferred from the key prefix (sk_live_ / rk_live_ → LIVE, sk_test_ / rk_test_ → TEST). account_id is filled automatically." },
     ],
     secrets: [
-      { key: "secret_key", label: "Secret key", type: "password", required: true, placeholder: "sk_test_… or sk_live_…" },
+      { key: "secret_key", label: "Secret key", type: "password", required: true, placeholder: "rk_live_… or sk_live_…", hint: "Restricted keys (rk_) require permissions: Account/Connect (Read, for /v1/account verification), Prices (Read), and Checkout Sessions (Write). Publishable keys (pk_) are not supported." },
       { key: "webhook_secrets", label: "Webhook secrets", type: "lines", required: true, placeholder: "whsec_… (one per line)", hint: "One signing secret per line." },
     ],
   },
@@ -184,10 +184,19 @@ function renderField(f, value, { prefix, forEdit }) {
   const req = f.required && !forEdit ? "required" : "";
   const ph = f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : "";
   const hint = f.hint ? `<p class="hint">${esc(f.hint)}</p>` : "";
+  if (f.type === "mode_tag") {
+    const initMode = typeof value === "boolean" ? value : (value === "true" ? true : (value === "false" ? false : null));
+    const initAttr = initMode == null ? "" : ` data-initial-mode="${initMode ? "true" : "false"}"`;
+    return `<div class="field">
+      <label>${esc(f.label)}</label>
+      <div class="conn-mode-row" data-stripe-mode-row${initAttr}>${stripeModeTag(initMode)}</div>
+      ${hint}
+    </div>`;
+  }
   if (f.type === "checkbox") {
     const checked = value === true || value === "true" || value === "on" ? "checked" : "";
     return `<div class="field">
-      <label class="checkbox"><input type="checkbox" name="${esc(name)}" ${checked}> ${esc(f.label)}</label>
+      <label class="settings-check"><input type="checkbox" name="${esc(name)}" ${checked}><span>${esc(f.label)}</span></label>
       ${hint}
     </div>`;
   }
@@ -213,11 +222,45 @@ function renderField(f, value, { prefix, forEdit }) {
   </div>`;
 }
 
+function stripeLiveFromKey(key) {
+  const k = String(key || "").trim();
+  if (k.startsWith("sk_live_") || k.startsWith("rk_live_")) return true;
+  if (k.startsWith("sk_test_") || k.startsWith("rk_test_")) return false;
+  return null;
+}
+
+function stripeModeTag(mode) {
+  if (mode === true) {
+    return `<span class="conn-mode-tag conn-mode-tag--live" data-stripe-mode="live">LIVE</span>`;
+  }
+  if (mode === false) {
+    return `<span class="conn-mode-tag conn-mode-tag--test" data-stripe-mode="test">TEST</span>`;
+  }
+  return `<span class="conn-mode-tag conn-mode-tag--auto" data-stripe-mode="auto">AUTO · BY KEY</span>`;
+}
+
+function bindStripeLiveMode(form) {
+  const key = form.querySelector('input[name="sec_secret_key"]');
+  const row = form.querySelector("[data-stripe-mode-row]");
+  if (!key || !row) return;
+  key.addEventListener("input", () => {
+    let mode = stripeLiveFromKey(key.value);
+    if (mode == null) {
+      const init = row.getAttribute("data-initial-mode");
+      mode = init === "true" ? true : (init === "false" ? false : null);
+    }
+    row.innerHTML = stripeModeTag(mode);
+  });
+}
+
 function collectPayload(form, schema, { requireSecrets }) {
   const fd = new FormData(form);
   const name = String(fd.get("name") || "").trim();
   const settings = {};
   for (const f of schema.settings) {
+    if (f.type === "mode_tag") {
+      continue;
+    }
     if (f.type === "checkbox") {
       settings[f.key] = fd.get("set_" + f.key) === "on";
       continue;
@@ -250,6 +293,10 @@ function collectPayload(form, schema, { requireSecrets }) {
     if (f.type === "lines") secrets[f.key] = linesToArray(raw);
     else secrets[f.key] = raw;
   }
+  if (schema === SCHEMAS.stripe && secrets.secret_key) {
+    const mode = stripeLiveFromKey(secrets.secret_key);
+    if (mode != null) settings.livemode = mode;
+  }
   return { name, settings, secrets, hasSecret };
 }
 
@@ -273,6 +320,32 @@ function sectionOrder(schema) {
     }
   }
   return order;
+}
+
+/** Header for the primary-setting column. Matches what primarySetting renders. */
+function configColumnLabel(provider) {
+  switch (provider) {
+    case "stripe":
+      return "Mode";
+    case "r2":
+      return "Bucket";
+    case "google_oauth":
+      return "Clients";
+    case "github_oauth":
+      return "Client ID";
+    case "apple_signin":
+      return "Services ID";
+    case "apple_iap":
+      return "Bundle ID";
+    case "google_play":
+      return "Package";
+    case "posthog":
+      return "Host";
+    case "openai_compatible":
+      return "Base URL";
+    default:
+      return "Config";
+  }
 }
 
 /** Short primary setting for the list column. */
@@ -459,6 +532,8 @@ function openDrawer(el, title, bodyHTML, kicker = "Connection") {
   drawer.querySelectorAll(".cancel-drawer").forEach((btn) => {
     btn.addEventListener("click", () => closeDrawer(el));
   });
+  const form = drawer.querySelector("form");
+  if (form) bindStripeLiveMode(form);
 }
 
 export async function renderConnections(el) {
@@ -514,8 +589,11 @@ export async function renderConnections(el) {
     const webhook = copyableURL(linkURL, copiedLabel, {
       missing: showRedirect ? MISSING_PUBLIC_URL : "",
     });
+    const configHTML = provider === "stripe"
+      ? stripeModeTag(Boolean(c.settings && c.settings.livemode))
+      : esc(primarySetting(provider, c.settings));
     const configCell = showConfig
-      ? `<td class="conn-config">${esc(primarySetting(provider, c.settings))}</td>`
+      ? `<td class="conn-config">${configHTML}</td>`
       : "";
     const linkCell = showLink ? `<td class="conn-webhook">${webhook}</td>` : "";
     return `<tr class="conn-row" data-conn-id="${esc(c.id)}" data-reveal="${i}">
@@ -534,7 +612,7 @@ export async function renderConnections(el) {
     </tr>`;
   }).join("");
   const configHead = showConfig
-    ? `<th>${provider === "openai_compatible" ? "Base URL" : "Config"}</th>`
+    ? `<th>${esc(configColumnLabel(provider))}</th>`
     : "";
   const linkHead = showLink ? `<th>${esc(linkLabel)}</th>` : "";
 
@@ -606,7 +684,7 @@ export async function renderConnections(el) {
         const merged = { ...(c.settings || {}) };
         for (const f of schema.settings) {
           if (Object.prototype.hasOwnProperty.call(settings, f.key)) merged[f.key] = settings[f.key];
-          else delete merged[f.key];
+          else if (f.type !== "mode_tag") delete merged[f.key];
         }
         const body = { name, settings: merged };
         if (hasSecret) body.secrets = secrets;

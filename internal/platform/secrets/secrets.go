@@ -141,7 +141,7 @@ func MaskSecret(s string) string {
 		return strings.Repeat("•", len(s))
 	}
 	prefix := ""
-	for _, p := range []string{"sk_live_", "sk_test_", "whsec_", "pk_live_", "pk_test_", "bk_"} {
+	for _, p := range []string{"sk_live_", "sk_test_", "rk_live_", "rk_test_", "whsec_", "pk_live_", "pk_test_", "bk_"} {
 		if strings.HasPrefix(s, p) {
 			prefix = p
 			break

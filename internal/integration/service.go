@@ -50,6 +50,9 @@ func (s *Service) CreateConnection(ctx context.Context, provider, name string, s
 	if err := ValidateSecretsJSON(provider, secretsJSON); err != nil {
 		return PublicConnection{}, ErrInvalidSecrets.WithDetails(map[string]any{"reason": err.Error()})
 	}
+	if norm, err := NormalizeSecretsJSON(provider, secretsJSON); err == nil {
+		secretsJSON = norm
+	}
 	if settings == nil {
 		settings = json.RawMessage(`{}`)
 	}
@@ -106,6 +109,9 @@ func (s *Service) UpdateConnection(ctx context.Context, id string, name *string,
 		}
 		if err := ValidateSecretsJSON(c.Provider, mergedSecrets); err != nil {
 			return PublicConnection{}, ErrInvalidSecrets.WithDetails(map[string]any{"reason": err.Error()})
+		}
+		if norm, err := NormalizeSecretsJSON(c.Provider, mergedSecrets); err == nil {
+			mergedSecrets = norm
 		}
 		enc, ver, err := s.box.Seal([]byte(mergedSecrets), secrets.ConnectionAAD(c.ID, c.Provider))
 		if err != nil {

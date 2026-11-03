@@ -1065,7 +1065,68 @@ input[type="reset"],
   color: #6b7280;
 }
 
-.conn-drawer input,
+.conn-drawer .field label.settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  margin-bottom: 0.15rem;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--user-ink);
+}
+
+.conn-mode-row {
+  display: flex;
+  align-items: center;
+  min-height: 1.75rem;
+  margin: 0.1rem 0 0.15rem;
+}
+
+.conn-mode-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.18rem 0.52rem;
+  border: 1.5px solid currentColor;
+  border-radius: 0.12rem;
+  font-family: var(--admin-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  user-select: none;
+}
+
+.conn-mode-tag::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.conn-mode-tag--live {
+  color: var(--user-teal, #0f6b5c);
+  background: rgba(15, 107, 92, 0.1);
+}
+
+.conn-mode-tag--test {
+  color: var(--user-amber, #c45c16);
+  background: rgba(196, 92, 22, 0.11);
+}
+
+.conn-mode-tag--auto {
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.08);
+}
+
+.conn-drawer input:not([type="checkbox"]),
 .conn-drawer select,
 .conn-drawer textarea {
   margin-bottom: 0;
@@ -1082,7 +1143,7 @@ input[type="reset"],
   --pico-font-family: var(--admin-sans);
 }
 
-.conn-drawer input:focus,
+.conn-drawer input:not([type="checkbox"]):focus,
 .conn-drawer select:focus,
 .conn-drawer textarea:focus {
   outline: 2px solid var(--user-amber);

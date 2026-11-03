@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -486,6 +487,9 @@ func (h *Handler) patchConnection(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, integration.ErrValidationFailed.WithDetails(map[string]any{"reason": err.Error()}))
 			return
 		}
+		if !hasJSONKey(settings, "livemode") {
+			mergedSettings, _ = integration.MergePatchJSON(mergedSettings, []byte(`{"livemode":null}`))
+		}
 		mergedSecrets := json.RawMessage(resolved.Secrets)
 		if body.Secrets != nil {
 			mergedSecrets, err = integration.MergePatchJSON(resolved.Secrets, body.Secrets)
@@ -519,16 +523,41 @@ func coalesceSettings(patch, existing json.RawMessage) json.RawMessage {
 	return existing
 }
 
+func hasJSONKey(raw json.RawMessage, key string) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
+}
+
 func (h *Handler) enrichStripeSettings(r *http.Request, settings, secretsJSON json.RawMessage, excludeID string) (json.RawMessage, error) {
 	var sec integration.StripeSecrets
-	if err := json.Unmarshal(secretsJSON, &sec); err != nil || sec.SecretKey == "" {
+	if err := json.Unmarshal(secretsJSON, &sec); err != nil {
 		return nil, integration.ErrInvalidSecrets
+	}
+	sec.SecretKey = strings.TrimSpace(sec.SecretKey)
+	if sec.SecretKey == "" {
+		return nil, integration.ErrInvalidSecrets
+	}
+	if _, _, err := integration.ClassifyStripeSecret(sec.SecretKey); err != nil {
+		return nil, err
 	}
 	if h.stripe == nil {
 		return nil, integration.ErrValidationFailed.WithDetails(map[string]any{"reason": "stripe client not configured"})
 	}
 	acc, err := h.stripe.GetAccount(r.Context(), sec.SecretKey)
 	if err != nil {
+		var apiErr *stripeapi.APIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusForbidden && strings.HasPrefix(sec.SecretKey, "rk_") {
+			return nil, integration.ErrValidationFailed.WithDetails(map[string]any{
+				"reason": "restricted key (rk_) lacks permission to read /v1/account (grant Account/Connect Read, Prices Read, and Checkout Sessions Write): " + err.Error(),
+			})
+		}
 		return nil, integration.ErrValidationFailed.WithDetails(map[string]any{"reason": err.Error()})
 	}
 	merged, livemode, err := integration.MergeStripeAccountSettings(settings, acc.ID, sec.SecretKey)

@@ -3,6 +3,7 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/builtly/builtly/internal/platform/secrets"
 )
@@ -102,6 +103,26 @@ func MaskSecretsJSON(provider string, plain []byte) (json.RawMessage, error) {
 	}
 }
 
+// NormalizeSecretsJSON trims whitespace on Stripe secrets before sealing.
+func NormalizeSecretsJSON(provider string, plain []byte) (json.RawMessage, error) {
+	if provider != ProviderStripe || len(plain) == 0 {
+		return json.RawMessage(plain), nil
+	}
+	var s StripeSecrets
+	if err := json.Unmarshal(plain, &s); err != nil {
+		return nil, err
+	}
+	s.SecretKey = strings.TrimSpace(s.SecretKey)
+	wh := make([]string, 0, len(s.WebhookSecrets))
+	for _, w := range s.WebhookSecrets {
+		if t := strings.TrimSpace(w); t != "" {
+			wh = append(wh, t)
+		}
+	}
+	s.WebhookSecrets = wh
+	return json.Marshal(s)
+}
+
 // ValidateSecretsJSON checks required secret fields for a provider.
 func ValidateSecretsJSON(provider string, plain []byte) error {
 	if len(plain) == 0 {
@@ -113,7 +134,13 @@ func ValidateSecretsJSON(provider string, plain []byte) error {
 		if err := json.Unmarshal(plain, &s); err != nil {
 			return err
 		}
-		if s.SecretKey == "" || len(s.WebhookSecrets) == 0 {
+		validWH := 0
+		for _, w := range s.WebhookSecrets {
+			if strings.TrimSpace(w) != "" {
+				validWH++
+			}
+		}
+		if strings.TrimSpace(s.SecretKey) == "" || validWH == 0 {
 			return fmt.Errorf("stripe requires secret_key and webhook_secrets")
 		}
 	case ProviderResend, ProviderPromoteKit, ProviderAffonso, ProviderOpenAI:

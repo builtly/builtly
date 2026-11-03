@@ -58,6 +58,10 @@ func TestMaskSecretNeverFull(t *testing.T) {
 	if !strings.HasSuffix(masked, raw[len(raw)-4:]) {
 		t.Fatalf("expected last4 preserved: %s", masked)
 	}
+	rk := secrets.MaskSecret("  rk_live_51AbCdEfGhIjKlMnOpQr  ")
+	if !strings.HasPrefix(rk, "rk_live_") || !strings.HasSuffix(rk, "OpQr") {
+		t.Fatalf("restricted key prefix/suffix not kept: %s", rk)
+	}
 }
 
 func TestAPIKeyFormat(t *testing.T) {
