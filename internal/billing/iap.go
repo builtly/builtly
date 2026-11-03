@@ -112,7 +112,8 @@ func (s *Service) verifyApple(ctx context.Context, app tenant.App, userID uuid.U
 		env = EnvSandbox
 	}
 	connID := cfg.connectionID
-	return s.commitIAP(ctx, app.ID, userID, product, ProviderApple, connID, transactionID, transactionID, env, nil)
+	amount, currency := appleChargedAmount(tx, product.PriceAmount, product.Currency)
+	return s.commitIAP(ctx, app.ID, userID, product, ProviderApple, connID, transactionID, transactionID, env, amount, currency, nil)
 }
 
 func (s *Service) verifyGoogle(ctx context.Context, app tenant.App, userID uuid.UUID, productID, token string) (VerifyIAPResult, error) {
@@ -165,7 +166,8 @@ func (s *Service) verifyGoogle(ctx context.Context, app tenant.App, userID uuid.
 	if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
 		env = EnvSandbox
 	}
-	result, err := s.commitIAP(ctx, app.ID, userID, product, ProviderGoogle, cfg.connectionID, ref, purchase.OrderID, env, map[string]any{
+	amount, currency := googleChargedAmount(ctx, s, cfg.cfg, purchase.OrderID, product.PriceAmount, product.Currency)
+	result, err := s.commitIAP(ctx, app.ID, userID, product, ProviderGoogle, cfg.connectionID, ref, purchase.OrderID, env, amount, currency, map[string]any{
 		"purchase_token": token, "store_product_id": productID,
 	})
 	if err != nil {
@@ -191,7 +193,7 @@ func (s *Service) consumeGoogle(cfg playstore.Config, productID, token string) {
 	s.iap.log.Error("google consume failed", "err", last, "product_id", productID)
 }
 
-func (s *Service) commitIAP(ctx context.Context, appID, userID uuid.UUID, product catalog.Product, provider, connID, providerRef, paymentRef, env string, extra map[string]any) (VerifyIAPResult, error) {
+func (s *Service) commitIAP(ctx context.Context, appID, userID uuid.UUID, product catalog.Product, provider, connID, providerRef, paymentRef, env string, amount int64, currency string, extra map[string]any) (VerifyIAPResult, error) {
 	now := db.Now()
 	purchaseID := uuid.Must(uuid.NewV7())
 	var pref, pay *string
@@ -203,10 +205,12 @@ func (s *Service) commitIAP(ctx context.Context, appID, userID uuid.UUID, produc
 	if extra != nil {
 		data, _ = json.Marshal(extra)
 	}
+	currency = normalizeCurrency(currency)
 	p := Purchase{
 		ID: purchaseID, AppID: appID, UserID: userID, ProductID: product.ID,
 		Provider: provider, ConnectionID: connID, ProviderRef: pref, PaymentRef: pay,
 		Status: StatusCompleted, Credits: product.Credits, Environment: env,
+		Amount: &amount, Currency: &currency,
 		ProviderData: data, CreatedAt: now, UpdatedAt: now,
 		CompletedAt: db.NullTime{Time: now, Valid: true},
 	}
@@ -235,7 +239,7 @@ func (s *Service) commitIAP(ctx context.Context, appID, userID uuid.UUID, produc
 			"purchase_id": p.ID.String(), "user_id": userID.String(),
 			"product_id": product.ID.String(), "product_sku": product.SKU,
 			"credits": product.Credits, "provider": provider,
-			"amount": product.PriceAmount, "currency": product.Currency,
+			"amount": amount, "currency": currency,
 			"environment": env,
 		})
 		return s.outbox.PublishTx(ctx, tx, outbox.Event{
@@ -301,6 +305,38 @@ func (s *Service) sandboxAccess(ctx context.Context, app tenant.App, userID uuid
 		return false, false
 	}
 	return true, true
+}
+
+// appleChargedAmount uses the signed transaction price when Apple includes it.
+// Missing price or currency falls back to the catalog quote so Activity is not blank.
+func appleChargedAmount(tx appstore.Transaction, fallback int64, fallbackCurrency string) (int64, string) {
+	if tx.Price == nil || strings.TrimSpace(tx.Currency) == "" {
+		return fallback, normalizeCurrency(fallbackCurrency)
+	}
+	milli, ok := scaleMilliunits(*tx.Price, tx.Quantity)
+	if !ok {
+		return fallback, normalizeCurrency(fallbackCurrency)
+	}
+	return minorFromMilliunits(milli, tx.Currency), normalizeCurrency(tx.Currency)
+}
+
+// googleChargedAmount uses orders.get total (customer paid, including tax). A missing
+// or failed order lookup keeps the catalog quote and does not fail the credit grant.
+func googleChargedAmount(ctx context.Context, s *Service, cfg playstore.Config, orderID string, fallback int64, fallbackCurrency string) (int64, string) {
+	fallbackCurrency = normalizeCurrency(fallbackCurrency)
+	if orderID == "" || s.iap.google == nil {
+		return fallback, fallbackCurrency
+	}
+	order, err := s.iap.google.GetOrder(ctx, cfg, orderID)
+	if err != nil {
+		s.iap.log.Warn("google order amount unavailable", "err", err, "order_id", orderID)
+		return fallback, fallbackCurrency
+	}
+	amount, currency, ok := minorFromGoogleUnits(order.Total.Units, order.Total.Nanos, order.Total.CurrencyCode)
+	if !ok {
+		return fallback, fallbackCurrency
+	}
+	return amount, currency
 }
 
 func validateAppleTx(tx appstore.Transaction, bundleID string, allowSandbox, requireAccountToken bool, userID uuid.UUID) string {

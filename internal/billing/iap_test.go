@@ -45,22 +45,23 @@ import (
 )
 
 type iapHarness struct {
-	srv         *server.Server
-	tSvc        *tenant.Service
-	iSvc        *integration.Service
-	catalog     *catalog.Service
-	billing     *billing.Service
-	credits     *credit.Service
-	authSvc     *auth.Service
-	appleURL    string
-	googleURL   string
-	appleChain  *iapChain
-	txMu        sync.Mutex
-	appleTx     map[string]string // transactionID → signed JWS
-	googleMu    sync.Mutex
-	googlePurch map[string]playstore.ProductPurchase // token → purchase
-	voided      []playstore.VoidedPurchase
-	consumed    []string
+	srv          *server.Server
+	tSvc         *tenant.Service
+	iSvc         *integration.Service
+	catalog      *catalog.Service
+	billing      *billing.Service
+	credits      *credit.Service
+	authSvc      *auth.Service
+	appleURL     string
+	googleURL    string
+	appleChain   *iapChain
+	txMu         sync.Mutex
+	appleTx      map[string]string // transactionID → signed JWS
+	googleMu     sync.Mutex
+	googlePurch  map[string]playstore.ProductPurchase // token → purchase
+	googleOrders map[string]playstore.Order
+	voided       []playstore.VoidedPurchase
+	consumed     []string
 }
 
 type iapChain struct {
@@ -74,8 +75,9 @@ type iapChain struct {
 func setupIAP(t *testing.T) *iapHarness {
 	t.Helper()
 	h := &iapHarness{
-		appleTx:     map[string]string{},
-		googlePurch: map[string]playstore.ProductPurchase{},
+		appleTx:      map[string]string{},
+		googlePurch:  map[string]playstore.ProductPurchase{},
+		googleOrders: map[string]playstore.Order{},
 	}
 	h.appleChain = genIAPChain(t)
 
@@ -109,6 +111,17 @@ func setupIAP(t *testing.T) *iapHarness {
 			items := append([]playstore.VoidedPurchase{}, h.voided...)
 			h.googleMu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{"voidedPurchases": items})
+		case strings.Contains(path, "/orders/") && r.Method == http.MethodGet:
+			parts := strings.Split(path, "/")
+			orderID := parts[len(parts)-1]
+			h.googleMu.Lock()
+			order, ok := h.googleOrders[orderID]
+			h.googleMu.Unlock()
+			if !ok {
+				http.Error(w, "not found", 404)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(order)
 		case strings.Contains(path, "/purchases/products/") && r.Method == http.MethodGet:
 			// .../products/{id}/tokens/{token}
 			parts := strings.Split(path, "/")
@@ -311,11 +324,19 @@ func (h *iapHarness) bind(t *testing.T, appID, provider, connID string) {
 
 func (h *iapHarness) putAppleTx(t *testing.T, txID, productID, env string, userID uuid.UUID) {
 	t.Helper()
+	h.putAppleTxClaims(t, txID, productID, env, userID, nil)
+}
+
+func (h *iapHarness) putAppleTxClaims(t *testing.T, txID, productID, env string, userID uuid.UUID, extra map[string]any) {
+	t.Helper()
 	claims := map[string]any{
 		"transactionId": txID, "originalTransactionId": txID,
 		"bundleId": "com.example.app", "productId": productID,
 		"type": "Consumable", "environment": env,
 		"appAccountToken": userID.String(), "signedDate": time.Now().UnixMilli(),
+	}
+	for k, v := range extra {
+		claims[k] = v
 	}
 	jws := h.appleChain.sign(t, claims)
 	h.txMu.Lock()
@@ -438,6 +459,101 @@ func TestIAPClaimGoogle(t *testing.T) {
 		t.Fatalf("want already_processed: %v", res)
 	}
 	time.Sleep(50 * time.Millisecond) // consume goroutine
+}
+
+func TestIAPPurchaseAmount(t *testing.T) {
+	h := setupIAP(t)
+	app := h.createApp(t, "acme")
+	appleConn := h.createAppleConn(t)
+	googleConn := h.createGoogleConn(t)
+	h.bindMany(t, app.ID.String(), map[string]string{
+		"apple_iap": appleConn, "google_play": googleConn,
+	})
+	access, userID := h.register(t, app, "pay@ex.com")
+
+	appleID := "credits_priced"
+	googleID := "credits_priced_g"
+	if _, err := h.catalog.Create(context.Background(), app.ID, catalog.CreateInput{
+		SKU: "priced", Name: "Priced", Credits: 100, PriceAmount: 499, Currency: "usd",
+		AppleProductID: &appleID, GoogleProductID: &googleID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.putAppleTxClaims(t, "tx_priced", appleID, "Production", userID, map[string]any{
+		"price": int64(9990), "currency": "USD", "quantity": 1,
+	})
+	rr := h.verifyApple(t, access, app.ID, "tx_priced")
+	if rr.Code != 200 {
+		t.Fatalf("apple priced: %d %s", rr.Code, rr.Body.String())
+	}
+	p, err := h.billing.Store().GetPurchaseByProviderRef(context.Background(), nil, app.ID, billing.ProviderApple, "tx_priced")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoney(t, p, 999, "usd")
+
+	h.putAppleTx(t, "tx_catalog", appleID, "Production", userID)
+	rr = h.verifyApple(t, access, app.ID, "tx_catalog")
+	if rr.Code != 200 {
+		t.Fatalf("apple catalog fallback: %d %s", rr.Code, rr.Body.String())
+	}
+	p, err = h.billing.Store().GetPurchaseByProviderRef(context.Background(), nil, app.ID, billing.ProviderApple, "tx_catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoney(t, p, 499, "usd")
+
+	h.googleMu.Lock()
+	h.googleOrders["GPA.priced"] = playstore.Order{
+		OrderID: "GPA.priced",
+		Total:   playstore.Money{CurrencyCode: "JPY", Units: "120", Nanos: 0},
+	}
+	h.googlePurch["tok_priced"] = playstore.ProductPurchase{
+		PurchaseState: 0, OrderID: "GPA.priced", PurchaseToken: "tok_priced",
+		ObfuscatedExternalAccountID: userID.String(),
+	}
+	h.googleMu.Unlock()
+	rr = h.verifyGoogle(t, access, app.ID, googleID, "tok_priced")
+	if rr.Code != 200 {
+		t.Fatalf("google order: %d %s", rr.Code, rr.Body.String())
+	}
+	p, err = h.billing.Store().GetPurchaseByPaymentRef(context.Background(), nil, billing.ProviderGoogle, "GPA.priced")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoney(t, p, 120, "jpy")
+
+	h.googleMu.Lock()
+	h.googlePurch["tok_fallback"] = playstore.ProductPurchase{
+		PurchaseState: 0, OrderID: "GPA.missing", PurchaseToken: "tok_fallback",
+		ObfuscatedExternalAccountID: userID.String(),
+	}
+	h.googleMu.Unlock()
+	rr = h.verifyGoogle(t, access, app.ID, googleID, "tok_fallback")
+	if rr.Code != 200 {
+		t.Fatalf("google catalog fallback: %d %s", rr.Code, rr.Body.String())
+	}
+	p, err = h.billing.Store().GetPurchaseByPaymentRef(context.Background(), nil, billing.ProviderGoogle, "GPA.missing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoney(t, p, 499, "usd")
+}
+
+func assertMoney(t *testing.T, p billing.Purchase, amount int64, currency string) {
+	t.Helper()
+	if p.Amount == nil || *p.Amount != amount || p.Currency == nil || *p.Currency != currency {
+		var gotAmount any = nil
+		var gotCurrency any = nil
+		if p.Amount != nil {
+			gotAmount = *p.Amount
+		}
+		if p.Currency != nil {
+			gotCurrency = *p.Currency
+		}
+		t.Fatalf("amount=%v currency=%v, want %d %s", gotAmount, gotCurrency, amount, currency)
+	}
 }
 
 func TestIAPSandboxEmailAllowlist(t *testing.T) {

@@ -80,10 +80,13 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, app tenant.App, user
 	if affiliate != "" {
 		affPtr = &affiliate
 	}
+	quote := product.PriceAmount
+	quoteCurrency := normalizeCurrency(product.Currency)
 	p := Purchase{
 		ID: purchaseID, AppID: app.ID, UserID: userID, ProductID: product.ID,
 		Provider: ProviderStripe, ConnectionID: resolved.ConnectionID,
 		Status: StatusPending, Credits: product.Credits, Environment: env,
+		Amount: &quote, Currency: &quoteCurrency,
 		AffiliateRef: affPtr, ProviderData: []byte(`{}`),
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -122,12 +125,21 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, app tenant.App, user
 		_ = s.store.MarkPurchaseStatus(ctx, nil, app.ID, purchaseID, StatusPending, StatusFailed, db.Now())
 		return CheckoutResult{}, ErrUpstream.WithDetails(map[string]any{"reason": err.Error()})
 	}
-	if err := s.store.UpdatePurchaseAfterSession(ctx, nil, app.ID, purchaseID, session.ID, StatusPending, db.Now()); err != nil {
+	var sessionAmount *int64
+	var sessionCurrency *string
+	if session.AmountTotal != nil && strings.TrimSpace(session.Currency) != "" {
+		sessionAmount = session.AmountTotal
+		c := normalizeCurrency(session.Currency)
+		sessionCurrency = &c
+		quote = *session.AmountTotal
+		quoteCurrency = c
+	}
+	if err := s.store.UpdatePurchaseAfterSession(ctx, nil, app.ID, purchaseID, session.ID, StatusPending, sessionAmount, sessionCurrency, db.Now()); err != nil {
 		return CheckoutResult{}, err
 	}
 	s.publishAnalytics(ctx, app.ID, outbox.EventCheckoutSessionCreated, map[string]any{
 		"user_id": userID.String(), "product_id": product.ID.String(), "product_sku": product.SKU,
-		"credits": product.Credits, "amount": product.PriceAmount, "currency": product.Currency,
+		"credits": product.Credits, "amount": quote, "currency": quoteCurrency,
 		"environment": env,
 	})
 	return CheckoutResult{PurchaseID: purchaseID, SessionID: session.ID, CheckoutURL: session.URL}, nil

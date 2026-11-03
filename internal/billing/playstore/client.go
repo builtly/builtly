@@ -32,6 +32,19 @@ type ProductPurchase struct {
 	PurchaseToken               string `json:"purchaseToken"`
 }
 
+// Money is a Play Money value. Units is a whole-number string; nanos is 1e-9 of the currency unit.
+type Money struct {
+	CurrencyCode string `json:"currencyCode"`
+	Units        string `json:"units"`
+	Nanos        int64  `json:"nanos"`
+}
+
+// Order is the charged total from orders.get.
+type Order struct {
+	OrderID string `json:"orderId"`
+	Total   Money  `json:"total"`
+}
+
 // VoidedPurchase is one voided purchase list item.
 type VoidedPurchase struct {
 	PurchaseToken      string `json:"purchaseToken"`
@@ -82,6 +95,37 @@ func (c *Client) GetProductPurchase(ctx context.Context, cfg Config, productID, 
 		return ProductPurchase{}, err
 	}
 	return p, nil
+}
+
+// GetOrder fetches the charged total for an order id.
+func (c *Client) GetOrder(ctx context.Context, cfg Config, orderID string) (Order, error) {
+	if orderID == "" {
+		return Order{}, fmt.Errorf("playstore: order id required")
+	}
+	hc, err := c.httpClient(ctx, cfg)
+	if err != nil {
+		return Order{}, err
+	}
+	path := fmt.Sprintf("%s/androidpublisher/v3/applications/%s/orders/%s",
+		strings.TrimRight(c.BaseURL, "/"), url.PathEscape(cfg.PackageName), url.PathEscape(orderID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return Order{}, err
+	}
+	res, err := hc.Do(req)
+	if err != nil {
+		return Order{}, err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if res.StatusCode != http.StatusOK {
+		return Order{}, &APIError{Status: res.StatusCode, Body: string(body)}
+	}
+	var order Order
+	if err := json.Unmarshal(body, &order); err != nil {
+		return Order{}, err
+	}
+	return order, nil
 }
 
 // Consume acknowledges a consumable purchase.

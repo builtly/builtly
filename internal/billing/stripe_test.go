@@ -43,16 +43,18 @@ const (
 )
 
 type stripeHarness struct {
-	srv       *server.Server
-	tSvc      *tenant.Service
-	iSvc      *integration.Service
-	catalog   *catalog.Service
-	billing   *billing.Service
-	credits   *credit.Service
-	authSvc   *auth.Service
-	stripeURL string
-	accountID atomic.Value // string
-	priceOK   bool
+	srv             *server.Server
+	tSvc            *tenant.Service
+	iSvc            *integration.Service
+	catalog         *catalog.Service
+	billing         *billing.Service
+	credits         *credit.Service
+	authSvc         *auth.Service
+	stripeURL       string
+	accountID       atomic.Value // string
+	priceOK         bool
+	sessionAmount   *int64
+	sessionCurrency string
 }
 
 func setupStripe(t *testing.T) *stripeHarness {
@@ -78,7 +80,12 @@ func setupStripe(t *testing.T) *stripeHarness {
 		if len(cs) > 40 {
 			cs = cs[:40]
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":%q,"url":"https://checkout.stripe.com/c/pay/%s"}`, cs, cs)))
+		body := fmt.Sprintf(`{"id":%q,"url":"https://checkout.stripe.com/c/pay/%s"}`, cs, cs)
+		if h.sessionAmount != nil && h.sessionCurrency != "" {
+			body = fmt.Sprintf(`{"id":%q,"url":"https://checkout.stripe.com/c/pay/%s","amount_total":%d,"currency":%q}`,
+				cs, cs, *h.sessionAmount, h.sessionCurrency)
+		}
+		_, _ = w.Write([]byte(body))
 	})
 	upstream := httptest.NewServer(mux)
 	t.Cleanup(upstream.Close)
@@ -280,6 +287,17 @@ func TestStripeWebhookReplayAndFulfil(t *testing.T) {
 	_ = json.Unmarshal(rr.Body.Bytes(), &co)
 	sessionID := co["session_id"].(string)
 	purchaseID := co["purchase_id"].(string)
+	pendingID, err := uuid.Parse(purchaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := h.billing.Store().GetPurchaseByID(context.Background(), nil, app.ID, pendingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending.Status != billing.StatusPending || pending.Amount == nil || *pending.Amount != 499 || pending.Currency == nil || *pending.Currency != "usd" {
+		t.Fatalf("pending amount: status=%s amount=%v currency=%v", pending.Status, pending.Amount, pending.Currency)
+	}
 
 	evt := map[string]any{
 		"id": "evt_pay_1", "type": "checkout.session.completed", "livemode": false,
@@ -332,6 +350,50 @@ func TestStripeWebhookReplayAndFulfil(t *testing.T) {
 	bal, _ = h.credits.GetBalance(context.Background(), app.ID, userID)
 	if bal.Balance != 100 {
 		t.Fatalf("balance changed after ignore: %d", bal.Balance)
+	}
+}
+
+func TestStripeSessionQuote(t *testing.T) {
+	h := setupStripe(t)
+	quote := int64(525)
+	h.sessionAmount = &quote
+	h.sessionCurrency = "USD"
+	app := h.createApp(t, "acme")
+	conn := h.createStripeConn(t, "stripe-a", "sk_test_aaa")
+	h.bindStripe(t, app.ID.String(), conn)
+	access, _ := h.register(t, app, "q@ex.com")
+	prod, err := h.catalog.Create(context.Background(), app.ID, catalog.CreateInput{
+		SKU: "pack100", Name: "100", Credits: 100, PriceAmount: 499, Currency: "usd",
+		StripePriceID: strPtr("price_ok"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"product_id":  prod.ID.String(),
+		"success_url": "https://acme.com/thanks", "cancel_url": "https://acme.com/pricing",
+	})
+	req := httptest.NewRequest("POST", "/api/v1/checkout/stripe", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("X-App-ID", app.ID.String())
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 201 {
+		t.Fatalf("checkout: %d %s", rr.Code, rr.Body.String())
+	}
+	var co map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &co)
+	id, err := uuid.Parse(co["purchase_id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := h.billing.Store().GetPurchaseByID(context.Background(), nil, app.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Status != billing.StatusPending || p.Amount == nil || *p.Amount != 525 || p.Currency == nil || *p.Currency != "usd" {
+		t.Fatalf("session quote: status=%s amount=%v currency=%v", p.Status, p.Amount, p.Currency)
 	}
 }
 

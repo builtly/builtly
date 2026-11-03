@@ -40,8 +40,10 @@ type Price struct {
 
 // CheckoutSession is the create-session response.
 type CheckoutSession struct {
-	ID  string `json:"id"`
-	URL string `json:"url"`
+	ID          string `json:"id"`
+	URL         string `json:"url"`
+	AmountTotal *int64 `json:"amount_total"`
+	Currency    string `json:"currency"`
 }
 
 // GetAccount calls GET /v1/account.

@@ -39,6 +39,10 @@ type Transaction struct {
 	AppAccountToken string `json:"appAccountToken"`
 	RevocationDate  *int64 `json:"revocationDate"`
 	SignedDate      int64  `json:"signedDate"`
+	// Price is the recorded price in milliunits (major units × 1000). Nil when Apple omits it.
+	Price    *int64 `json:"price"`
+	Currency string `json:"currency"`
+	Quantity int64  `json:"quantity"`
 }
 
 // NotificationPayload is the decoded App Store Server Notification V2 body.

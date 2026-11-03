@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,15 +69,23 @@ func (s *Store) GetPurchaseByPaymentRef(ctx context.Context, q db.Querier, provi
 }
 
 // UpdatePurchaseAfterSession sets provider_ref after Stripe session create.
-func (s *Store) UpdatePurchaseAfterSession(ctx context.Context, q db.Querier, appID, id uuid.UUID, ref, status string, now db.Time) error {
+// A non-nil amount replaces the catalog quote with the session total.
+func (s *Store) UpdatePurchaseAfterSession(ctx context.Context, q db.Querier, appID, id uuid.UUID, ref, status string, amount *int64, currency *string, now db.Time) error {
+	if currency != nil {
+		c := strings.ToLower(strings.TrimSpace(*currency))
+		currency = &c
+	}
 	_, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
-		UPDATE purchases SET provider_ref = ?, status = ?, updated_at = ? WHERE app_id = ? AND id = ?`),
-		ref, status, now, appID, id)
+		UPDATE purchases SET provider_ref = ?, status = ?,
+			amount = COALESCE(?, amount), currency = COALESCE(?, currency), updated_at = ?
+		WHERE app_id = ? AND id = ?`),
+		ref, status, amount, currency, now, appID, id)
 	return db.MapError(err)
 }
 
 // MarkPurchaseCompleted marks a pending purchase completed.
 func (s *Store) MarkPurchaseCompleted(ctx context.Context, q db.Querier, appID, id uuid.UUID, amount int64, currency, paymentRef string, now db.Time) (bool, error) {
+	currency = strings.ToLower(strings.TrimSpace(currency))
 	res, err := s.q(q).ExecContext(ctx, s.db.Rebind(`
 		UPDATE purchases SET status = ?, amount = ?, currency = ?, payment_ref = ?,
 			completed_at = ?, updated_at = ?

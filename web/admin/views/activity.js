@@ -12,11 +12,18 @@ const ZERO_DECIMAL = new Set([
   "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
 ]);
 
+const THREE_DECIMAL = new Set([
+  "bhd", "jod", "kwd", "omr", "tnd",
+]);
+
 const PAGE_SIZE = 50;
 const CURSOR_FIRST = "_";
 
-function currencyFactor(currency) {
-  return ZERO_DECIMAL.has(String(currency || "").toLowerCase()) ? 1 : 100;
+function currencyDecimals(currency) {
+  const cur = String(currency || "").toLowerCase();
+  if (ZERO_DECIMAL.has(cur)) return 0;
+  if (THREE_DECIMAL.has(cur)) return 3;
+  return 2;
 }
 
 function moneyLabel(minor, currency) {
@@ -24,8 +31,8 @@ function moneyLabel(minor, currency) {
   const n = Number(minor);
   if (!Number.isFinite(n)) return String(minor);
   const cur = String(currency || "").toLowerCase();
-  const f = currencyFactor(cur);
-  const major = f === 1 ? String(Math.round(n)) : (n / f).toFixed(2);
+  const decimals = currencyDecimals(cur);
+  const major = decimals === 0 ? String(Math.round(n)) : (n / (10 ** decimals)).toFixed(decimals);
   return `${major} ${(cur || "").toUpperCase()}`.trim();
 }
 

@@ -40,8 +40,8 @@ type Purchase struct {
 	Status          string      `db:"status" json:"status"`
 	Credits         int64       `db:"credits" json:"credits"`
 	RefundedCredits int64       `db:"refunded_credits" json:"refunded_credits"`
-	Amount          *int64      `db:"amount" json:"amount,omitempty"`
-	Currency        *string     `db:"currency" json:"currency,omitempty"`
+	Amount          *int64      `db:"amount" json:"amount,omitempty"`     // minor units; quote until the provider reports the charge
+	Currency        *string     `db:"currency" json:"currency,omitempty"` // ISO-4217 lowercase
 	Environment     string      `db:"environment" json:"environment"`
 	AffiliateRef    *string     `db:"affiliate_ref" json:"affiliate_ref,omitempty"`
 	ProviderData    []byte      `db:"provider_data" json:"-"`
