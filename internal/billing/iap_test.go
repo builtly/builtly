@@ -255,6 +255,34 @@ func (h *iapHarness) createGoogleConn(t *testing.T) string {
 	return out["id"].(string)
 }
 
+func (h *iapHarness) bindMany(t *testing.T, appID string, bindings map[string]string) {
+	t.Helper()
+	id, err := uuid.Parse(appID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := h.tSvc.Get(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	integrations := map[string]any{}
+	for provider, connID := range bindings {
+		integrations[provider] = map[string]any{"connection_id": connID}
+	}
+	cfgBody, _ := json.Marshal(map[string]any{
+		"settings":     app.Settings,
+		"integrations": integrations,
+	})
+	req := httptest.NewRequest("PUT", "/api/v1/admin/apps/"+appID+"/config", bytes.NewReader(cfgBody))
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("bind many: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
 func (h *iapHarness) bind(t *testing.T, appID, provider, connID string) {
 	t.Helper()
 	id, err := uuid.Parse(appID)
@@ -410,6 +438,139 @@ func TestIAPClaimGoogle(t *testing.T) {
 		t.Fatalf("want already_processed: %v", res)
 	}
 	time.Sleep(50 * time.Millisecond) // consume goroutine
+}
+
+func TestIAPSandboxEmailAllowlist(t *testing.T) {
+	h := setupIAP(t)
+	app, err := h.tSvc.Create(context.Background(), "prodapp", "Prod", tenant.Settings{
+		AllowedOrigins:   []string{"https://prodapp.com"},
+		AllowIAPSandbox:  false,
+		IAPSandboxEmails: []string{"reviewer@ex.com"},
+		Auth:             tenant.AuthSettings{PasswordEnabled: true},
+		Email:            tenant.EmailSettings{FromAddress: "n@prodapp.com", ActionBaseURL: "https://prodapp.com"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appleConn := h.createAppleConn(t)
+	googleConn := h.createGoogleConn(t)
+	h.bindMany(t, app.ID.String(), map[string]string{
+		"apple_iap": appleConn, "google_play": googleConn,
+	})
+	reviewAccess, reviewID := h.register(t, app, "reviewer@ex.com")
+	otherAccess, otherID := h.register(t, app, "other@ex.com")
+
+	appleID := "credits_review"
+	googleID := "credits_review_g"
+	if _, err := h.catalog.Create(context.Background(), app.ID, catalog.CreateInput{
+		SKU: "prev", Name: "Review", Credits: 100, PriceAmount: 0, Currency: "usd",
+		AppleProductID: &appleID, GoogleProductID: &googleID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	h.putAppleTx(t, "tx_review", appleID, "Sandbox", reviewID)
+	rr := h.verifyApple(t, reviewAccess, app.ID, "tx_review")
+	if rr.Code != 200 {
+		t.Fatalf("allowlisted sandbox: %d %s", rr.Code, rr.Body.String())
+	}
+	p, err := h.billing.Store().GetPurchaseByProviderRef(context.Background(), nil, app.ID, billing.ProviderApple, "tx_review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Environment != billing.EnvSandbox {
+		t.Fatalf("environment: %s", p.Environment)
+	}
+
+	h.putAppleTx(t, "tx_other", appleID, "Sandbox", otherID)
+	rr = h.verifyApple(t, otherAccess, app.ID, "tx_other")
+	if rr.Code != 422 || iapReason(t, rr) != "sandbox_not_allowed" {
+		t.Fatalf("other sandbox: %d %s", rr.Code, rr.Body.String())
+	}
+
+	jws := h.appleChain.sign(t, map[string]any{
+		"transactionId": "tx_notoken", "originalTransactionId": "tx_notoken",
+		"bundleId": "com.example.app", "productId": appleID,
+		"type": "Consumable", "environment": "Sandbox", "signedDate": time.Now().UnixMilli(),
+	})
+	h.txMu.Lock()
+	h.appleTx["tx_notoken"] = jws
+	h.txMu.Unlock()
+	rr = h.verifyApple(t, reviewAccess, app.ID, "tx_notoken")
+	if rr.Code != 422 || iapReason(t, rr) != "account_token_required" {
+		t.Fatalf("missing token: %d %s", rr.Code, rr.Body.String())
+	}
+
+	h.putAppleTx(t, "tx_prod", appleID, "Production", otherID)
+	rr = h.verifyApple(t, otherAccess, app.ID, "tx_prod")
+	if rr.Code != 200 {
+		t.Fatalf("production still allowed: %d %s", rr.Code, rr.Body.String())
+	}
+
+	signedTx := h.appleChain.sign(t, map[string]any{
+		"transactionId": "tx_review", "bundleId": "com.example.app", "productId": appleID,
+		"type": "Consumable", "environment": "Sandbox",
+	})
+	notif := h.appleChain.sign(t, map[string]any{
+		"notificationType": "REFUND", "notificationUUID": "notif-allowlist-refund",
+		"data": map[string]any{
+			"bundleId": "com.example.app", "environment": "Sandbox",
+			"signedTransactionInfo": signedTx,
+		},
+	})
+	body, _ := json.Marshal(map[string]string{"signedPayload": notif})
+	req := httptest.NewRequest("POST", "/api/v1/webhooks/apple/"+appleConn, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	wrr := httptest.NewRecorder()
+	h.srv.Router().ServeHTTP(wrr, req)
+	if wrr.Code != 200 {
+		t.Fatalf("sandbox refund: %d %s", wrr.Code, wrr.Body.String())
+	}
+	bal, _ := h.credits.GetBalance(context.Background(), app.ID, reviewID)
+	if bal.Balance != 0 {
+		t.Fatalf("sandbox refund with flag off want 0, got %d", bal.Balance)
+	}
+
+	pt := 0
+	h.googleMu.Lock()
+	h.googlePurch["tok_review"] = playstore.ProductPurchase{
+		PurchaseState: 0, OrderID: "GPA.review", PurchaseType: &pt,
+		ObfuscatedExternalAccountID: reviewID.String(),
+	}
+	h.googlePurch["tok_other"] = playstore.ProductPurchase{
+		PurchaseState: 0, OrderID: "GPA.other", PurchaseType: &pt,
+		ObfuscatedExternalAccountID: otherID.String(),
+	}
+	h.googlePurch["tok_notoken"] = playstore.ProductPurchase{
+		PurchaseState: 0, OrderID: "GPA.notoken", PurchaseType: &pt,
+	}
+	h.googleMu.Unlock()
+	rr = h.verifyGoogle(t, reviewAccess, app.ID, googleID, "tok_review")
+	if rr.Code != 200 {
+		t.Fatalf("allowlisted google test: %d %s", rr.Code, rr.Body.String())
+	}
+	rr = h.verifyGoogle(t, otherAccess, app.ID, googleID, "tok_other")
+	if rr.Code != 422 || iapReason(t, rr) != "sandbox_not_allowed" {
+		t.Fatalf("other google test: %d %s", rr.Code, rr.Body.String())
+	}
+	rr = h.verifyGoogle(t, reviewAccess, app.ID, googleID, "tok_notoken")
+	if rr.Code != 422 || iapReason(t, rr) != "account_token_required" {
+		t.Fatalf("google missing token: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func iapReason(t *testing.T, rr *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Details map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	reason, _ := body.Error.Details["reason"].(string)
+	return reason
 }
 
 func TestAppleRefundAndReversal(t *testing.T) {

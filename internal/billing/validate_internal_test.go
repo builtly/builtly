@@ -28,31 +28,45 @@ func TestValidateAppleTxVariants(t *testing.T) {
 		{"acct", appstore.Transaction{BundleID: "b", Type: "Consumable", Environment: "Production", AppAccountToken: uuid.Must(uuid.NewV7()).String()}, "account_mismatch"},
 	}
 	for _, tc := range cases {
-		if got := validateAppleTx(tc.tx, "b", false, uid); got != tc.want {
+		if got := validateAppleTx(tc.tx, "b", false, false, uid); got != tc.want {
 			t.Fatalf("%s: got %q want %q", tc.name, got, tc.want)
 		}
 	}
-	if got := validateAppleTx(appstore.Transaction{BundleID: "b", Type: "Consumable", Environment: "Sandbox"}, "b", true, uid); got != "" {
+	if got := validateAppleTx(appstore.Transaction{BundleID: "b", Type: "Consumable", Environment: "Sandbox"}, "b", true, false, uid); got != "" {
 		t.Fatalf("sandbox allowed: %q", got)
+	}
+	if got := validateAppleTx(appstore.Transaction{BundleID: "b", Type: "Consumable", Environment: "Sandbox", AppAccountToken: uid.String()}, "b", true, true, uid); got != "" {
+		t.Fatalf("allowlist sandbox: %q", got)
+	}
+	if got := validateAppleTx(appstore.Transaction{BundleID: "b", Type: "Consumable", Environment: "Sandbox"}, "b", true, true, uid); got != "account_token_required" {
+		t.Fatalf("allowlist missing token: %q", got)
 	}
 }
 
 func TestValidateGooglePurchaseVariants(t *testing.T) {
 	uid := uuid.Must(uuid.NewV7())
 	pt := 0
-	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 1}, true, uid); got != "not_found" {
+	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 1}, true, false, uid); got != "not_found" {
 		t.Fatalf("state: %q", got)
 	}
-	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 0, PurchaseType: &pt}, false, uid); got != "sandbox_not_allowed" {
+	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 0, PurchaseType: &pt}, false, false, uid); got != "sandbox_not_allowed" {
 		t.Fatalf("sandbox: %q", got)
 	}
 	if got := validateGooglePurchase(playstore.ProductPurchase{
 		PurchaseState: 0, ObfuscatedExternalAccountID: uuid.Must(uuid.NewV7()).String(),
-	}, true, uid); got != "account_mismatch" {
+	}, true, false, uid); got != "account_mismatch" {
 		t.Fatalf("acct: %q", got)
 	}
-	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 0}, true, uid); got != "" {
+	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 0}, true, false, uid); got != "" {
 		t.Fatalf("ok: %q", got)
+	}
+	if got := validateGooglePurchase(playstore.ProductPurchase{
+		PurchaseState: 0, PurchaseType: &pt, ObfuscatedExternalAccountID: uid.String(),
+	}, true, true, uid); got != "" {
+		t.Fatalf("allowlist sandbox: %q", got)
+	}
+	if got := validateGooglePurchase(playstore.ProductPurchase{PurchaseState: 0, PurchaseType: &pt}, true, true, uid); got != "account_token_required" {
+		t.Fatalf("allowlist missing token: %q", got)
 	}
 }
 

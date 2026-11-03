@@ -3,9 +3,12 @@ package tenant
 import (
 	"encoding/json"
 	"fmt"
+	"net/mail"
 	"net/url"
 	"strings"
 )
+
+const maxIAPSandboxEmails = 50
 
 // Settings is the non-secret per-app configuration stored in apps.settings.
 type Settings struct {
@@ -14,6 +17,7 @@ type Settings struct {
 	Auth               AuthSettings      `json:"auth"`
 	SignupBonusCredits int64             `json:"signup_bonus_credits"`
 	AllowIAPSandbox    bool              `json:"allow_iap_sandbox"`
+	IAPSandboxEmails   []string          `json:"iap_sandbox_emails"`
 	Email              EmailSettings     `json:"email"`
 	Storage            StorageSettings   `json:"storage"`
 	Analytics          AnalyticsSettings `json:"analytics"`
@@ -102,6 +106,7 @@ func DefaultSettings() Settings {
 			Providers:       []string{},
 		},
 		SignupBonusCredits: 0,
+		IAPSandboxEmails:   []string{},
 		Email:              EmailSettings{},
 		Storage: StorageSettings{
 			MaxFileBytes:        10 << 20,
@@ -210,6 +215,7 @@ func normalizeSettings(s Settings) Settings {
 	if s.Auth.Providers == nil {
 		s.Auth.Providers = []string{}
 	}
+	s.IAPSandboxEmails = normalizeIAPSandboxEmails(s.IAPSandboxEmails)
 	if s.Storage.AllowedContentTypes == nil {
 		s.Storage.AllowedContentTypes = []string{}
 	}
@@ -260,6 +266,14 @@ func (s Settings) Validate() error {
 	if s.SignupBonusCredits < 0 {
 		return fmt.Errorf("tenant: signup_bonus_credits must be >= 0")
 	}
+	if len(s.IAPSandboxEmails) > maxIAPSandboxEmails {
+		return fmt.Errorf("tenant: iap_sandbox_emails exceeds %d entries", maxIAPSandboxEmails)
+	}
+	for _, addr := range s.IAPSandboxEmails {
+		if !validEmail(addr) {
+			return fmt.Errorf("tenant: invalid iap_sandbox_emails entry %q", addr)
+		}
+	}
 	if s.Auth.GuestLoginEnabled && strings.TrimSpace(s.Auth.GuestEmailDomain) == "" {
 		return fmt.Errorf("tenant: auth.guest_email_domain is required when guest_login_enabled is true")
 	}
@@ -297,6 +311,53 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("tenant: storage limits must be > 0")
 	}
 	return nil
+}
+
+// SandboxEmailAllowed reports whether email may redeem IAP sandbox or test purchases
+// when AllowIAPSandbox is false. Matching is case-insensitive.
+func (s Settings) SandboxEmailAllowed(email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	for _, addr := range s.IAPSandboxEmails {
+		if addr == email {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeIAPSandboxEmails(in []string) []string {
+	if len(in) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		addr := strings.ToLower(strings.TrimSpace(raw))
+		if addr == "" {
+			continue
+		}
+		if _, ok := seen[addr]; ok {
+			continue
+		}
+		seen[addr] = struct{}{}
+		out = append(out, addr)
+	}
+	return out
+}
+
+func validEmail(addr string) bool {
+	if addr == "" || strings.ContainsAny(addr, " \t") {
+		return false
+	}
+	parsed, err := mail.ParseAddress(addr)
+	if err != nil || !strings.EqualFold(parsed.Address, addr) {
+		return false
+	}
+	local, domain, ok := strings.Cut(addr, "@")
+	return ok && local != "" && strings.Contains(domain, ".")
 }
 
 // AllowsOrigin reports whether origin is in the allow list (exact match).

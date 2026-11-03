@@ -84,7 +84,10 @@ func (c *Client) GetTransaction(ctx context.Context, cfg Config, transactionID s
 	if err == nil {
 		return tx, nil
 	}
-	if status == http.StatusNotFound && allowSandbox {
+	// Before the first App Store release, production returns 401 (often an empty body)
+	// for a sandbox transaction id instead of 404 TransactionIdNotFound. Callers who
+	// may not use sandbox are not sent to the sandbox host.
+	if allowSandbox && (status == http.StatusNotFound || status == http.StatusUnauthorized) {
 		return c.fetchOnly(ctx, c.Sandbox, tok, transactionID)
 	}
 	return Transaction{}, err

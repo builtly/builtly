@@ -91,7 +91,8 @@ func (s *Service) verifyApple(ctx context.Context, app tenant.App, userID uuid.U
 	if err != nil {
 		return VerifyIAPResult{}, err
 	}
-	tx, err := s.iap.apple.GetTransaction(ctx, cfg.Config, transactionID, app.Settings.AllowIAPSandbox)
+	allowSandbox, requireAccountToken := s.sandboxAccess(ctx, app, userID)
+	tx, err := s.iap.apple.GetTransaction(ctx, cfg.Config, transactionID, allowSandbox)
 	if err != nil {
 		var ae *appstore.APIError
 		if errors.As(err, &ae) && ae.Status == 404 {
@@ -99,7 +100,7 @@ func (s *Service) verifyApple(ctx context.Context, app tenant.App, userID uuid.U
 		}
 		return VerifyIAPResult{}, ErrUpstream.WithDetails(map[string]any{"reason": err.Error()})
 	}
-	if reason := validateAppleTx(tx, cfg.BundleID, app.Settings.AllowIAPSandbox, userID); reason != "" {
+	if reason := validateAppleTx(tx, cfg.BundleID, allowSandbox, requireAccountToken, userID); reason != "" {
 		return VerifyIAPResult{}, ErrReceiptInvalid.WithDetails(map[string]any{"reason": reason})
 	}
 	product, err := s.catalog.GetByAppleProductID(ctx, app.ID, tx.ProductID)
@@ -146,7 +147,8 @@ func (s *Service) verifyGoogle(ctx context.Context, app tenant.App, userID uuid.
 		}
 		return VerifyIAPResult{}, ErrUpstream.WithDetails(map[string]any{"reason": err.Error()})
 	}
-	if reason := validateGooglePurchase(purchase, app.Settings.AllowIAPSandbox, userID); reason != "" {
+	allowSandbox, requireAccountToken := s.sandboxAccess(ctx, app, userID)
+	if reason := validateGooglePurchase(purchase, allowSandbox, requireAccountToken, userID); reason != "" {
 		return VerifyIAPResult{}, ErrReceiptInvalid.WithDetails(map[string]any{"reason": reason})
 	}
 	// Already consumed on Google without our row
@@ -282,7 +284,26 @@ func googleProviderRef(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func validateAppleTx(tx appstore.Transaction, bundleID string, allowSandbox bool, userID uuid.UUID) string {
+// sandboxAccess reports whether this user may redeem a sandbox or test purchase.
+// requireAccountToken is set only for the production email allowlist: the store account
+// token must identify that user, so an allowlisted account cannot submit an arbitrary sandbox id.
+// The global AllowIAPSandbox flag (test apps) keeps the token optional so guest purchases
+// created after payment still verify.
+func (s *Service) sandboxAccess(ctx context.Context, app tenant.App, userID uuid.UUID) (allow, requireAccountToken bool) {
+	if app.Settings.AllowIAPSandbox {
+		return true, false
+	}
+	if len(app.Settings.IAPSandboxEmails) == 0 || s.users == nil {
+		return false, false
+	}
+	email, err := s.users.PrimaryEmail(ctx, app.ID, userID)
+	if err != nil || !app.Settings.SandboxEmailAllowed(email) {
+		return false, false
+	}
+	return true, true
+}
+
+func validateAppleTx(tx appstore.Transaction, bundleID string, allowSandbox, requireAccountToken bool, userID uuid.UUID) string {
 	if tx.BundleID != bundleID {
 		return "wrong_app"
 	}
@@ -292,24 +313,32 @@ func validateAppleTx(tx appstore.Transaction, bundleID string, allowSandbox bool
 	if tx.RevocationDate != nil {
 		return "revoked"
 	}
-	if strings.EqualFold(tx.Environment, "Sandbox") && !allowSandbox {
+	sandbox := strings.EqualFold(tx.Environment, "Sandbox")
+	if sandbox && !allowSandbox {
 		return "sandbox_not_allowed"
 	}
 	if tx.AppAccountToken != "" && !strings.EqualFold(tx.AppAccountToken, userID.String()) {
 		return "account_mismatch"
 	}
+	if sandbox && requireAccountToken && !strings.EqualFold(tx.AppAccountToken, userID.String()) {
+		return "account_token_required"
+	}
 	return ""
 }
 
-func validateGooglePurchase(p playstore.ProductPurchase, allowSandbox bool, userID uuid.UUID) string {
+func validateGooglePurchase(p playstore.ProductPurchase, allowSandbox, requireAccountToken bool, userID uuid.UUID) string {
 	if p.PurchaseState != 0 {
 		return "not_found"
 	}
-	if p.PurchaseType != nil && *p.PurchaseType == 0 && !allowSandbox {
+	sandbox := p.PurchaseType != nil && *p.PurchaseType == 0
+	if sandbox && !allowSandbox {
 		return "sandbox_not_allowed"
 	}
 	if p.ObfuscatedExternalAccountID != "" && p.ObfuscatedExternalAccountID != userID.String() {
 		return "account_mismatch"
+	}
+	if sandbox && requireAccountToken && p.ObfuscatedExternalAccountID != userID.String() {
+		return "account_token_required"
 	}
 	return ""
 }

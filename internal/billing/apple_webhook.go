@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -82,18 +81,9 @@ func (s *Service) HandleAppleWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	app, err := s.tenants.Get(r.Context(), boundApp)
-	if err != nil {
-		_ = s.store.FinishWebhookEvent(r.Context(), nil, row.ID, WebhookFailed, err.Error(), appID, db.Now())
-		http.Error(w, "error", http.StatusInternalServerError)
-		return
-	}
-	if strings.EqualFold(notif.Data.Environment, "Sandbox") && !app.Settings.AllowIAPSandbox {
-		_ = s.store.FinishWebhookEvent(r.Context(), nil, row.ID, WebhookIgnored, "sandbox_not_allowed", appID, db.Now())
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
+	// Sandbox notifications are not dropped when allow_iap_sandbox is off. A refund of a
+	// purchase already accepted via the email allowlist must still claw back. A sandbox
+	// notification with no purchase row is ignored by handleAppleNotification.
 	status, lastErr, transient := s.handleAppleNotification(r.Context(), boundApp, notif)
 	if transient {
 		_ = s.store.FinishWebhookEvent(r.Context(), nil, row.ID, WebhookFailed, lastErr, appID, db.Now())

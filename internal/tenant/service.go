@@ -157,6 +157,7 @@ func (s *Service) UpdateMeta(ctx context.Context, id uuid.UUID, name *string, st
 
 // ReplaceSettings validates and stores settings.
 func (s *Service) ReplaceSettings(ctx context.Context, id uuid.UUID, settings Settings) (App, error) {
+	settings = normalizeSettings(settings)
 	if err := settings.Validate(); err != nil {
 		return App{}, ErrInvalidSettings.WithDetails(map[string]any{"reason": err.Error()})
 	}

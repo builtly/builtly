@@ -2,6 +2,7 @@ package tenant_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,5 +134,33 @@ func TestSettingsGuestLoginValidationAndMatching(t *testing.T) {
 	}
 	if st.IsGuestEmail("guest_@device.example.com") {
 		t.Fatal("IsGuestEmail should return false for empty guest id")
+	}
+}
+
+func TestIAPSandboxEmails(t *testing.T) {
+	st := tenant.DefaultSettings()
+	st.IAPSandboxEmails = []string{"not-an-email"}
+	if err := st.Validate(); err == nil {
+		t.Fatal("expected invalid iap_sandbox_emails")
+	}
+
+	raw, err := json.Marshal(map[string]any{
+		"iap_sandbox_emails": []string{" Reviewer@Example.com ", "reviewer@example.com", ""},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := tenant.ParseSettings(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.IAPSandboxEmails) != 1 || parsed.IAPSandboxEmails[0] != "reviewer@example.com" {
+		t.Fatalf("normalized: %#v", parsed.IAPSandboxEmails)
+	}
+	if !parsed.SandboxEmailAllowed("Reviewer@Example.com") {
+		t.Fatal("allowlist should match case-insensitively")
+	}
+	if parsed.SandboxEmailAllowed("other@example.com") {
+		t.Fatal("unlisted email should be denied")
 	}
 }

@@ -30,6 +30,7 @@ export async function renderAppSettings(el, appID) {
   const allowedOriginsText = (s.allowed_origins || []).join("\n");
   const redirectURLsText = (s.auth_redirect_urls || []).join("\n");
   const contentTypesText = (storage.allowed_content_types || DEFAULT_MIME_TYPES).join("\n");
+  const sandboxEmailsText = (s.iap_sandbox_emails || []).join("\n");
 
   const maxFileMB = Math.round((storage.max_file_bytes || 10 * BYTES_PER_MB) / BYTES_PER_MB);
   const userQuotaMB = Math.round((storage.user_quota_bytes || 100 * BYTES_PER_MB) / BYTES_PER_MB);
@@ -210,13 +211,23 @@ export async function renderAppSettings(el, appID) {
           <div class="settings-check-group">
             <label class="settings-check">
               <input type="checkbox" name="allow_iap_sandbox" ${s.allow_iap_sandbox ? "checked" : ""}>
-              <span>Allow Apple IAP sandbox receipts</span>
-            </label>
-            <label class="settings-check">
-              <input type="checkbox" name="analytics_capture_consume" ${analytics.capture_consume_events ? "checked" : ""}>
-              <span>Capture credit consumption to PostHog</span>
+              <span>Allow all IAP sandbox and test purchases</span>
             </label>
           </div>
+        </div>
+        <div class="field">
+          <label for="iap-sandbox-emails">Sandbox tester emails</label>
+          <textarea id="iap-sandbox-emails" name="iap_sandbox_emails" class="settings-mono-textarea" rows="3" spellcheck="false" placeholder="reviewer@example.com">${esc(sandboxEmailsText)}</textarea>
+          <p class="hint">Builtly account emails, not Apple IDs or Google accounts. One per line. Leave the switch above off in production; these accounts can still redeem Apple sandbox and Google test purchases. They must sign in before purchase so the store account token matches that user. Turn the switch on only for a test app, where every sandbox purchase is accepted. Use the list for App Review and named testers.</p>
+        </div>
+        <div class="field">
+          <div class="settings-check-group">
+            <label class="settings-check">
+              <input type="checkbox" name="analytics_capture_consume" ${analytics.capture_consume_events ? "checked" : ""}>
+              <span>Capture credit consumption events</span>
+            </label>
+          </div>
+          <p class="hint">Sends each credit deduction to the analytics connection bound to this app. Signup and purchase events are sent either way.</p>
         </div>
       </section>
 
@@ -281,6 +292,7 @@ export async function renderAppSettings(el, appID) {
       auth_redirect_urls: redirects,
       signup_bonus_credits: Math.max(0, Number(fd.get("signup_bonus_credits")) || 0),
       allow_iap_sandbox: fd.get("allow_iap_sandbox") === "on",
+      iap_sandbox_emails: parseLines(String(fd.get("iap_sandbox_emails") || "")).map((e) => e.toLowerCase()),
       auth: {
         ...(s.auth || {}),
         password_enabled: fd.get("auth_password_enabled") === "on",

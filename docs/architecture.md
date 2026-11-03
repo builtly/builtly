@@ -491,7 +491,8 @@ CREATE INDEX idx_app_api_keys_app ON app_api_keys (app_id);
     "require_email_verification": false   // true → unverified password users get 403 email_not_verified on login
   },
   "signup_bonus_credits":  10,
-  "allow_iap_sandbox":     false,
+  "allow_iap_sandbox":     false,   // test app: accept every Apple sandbox / Google test purchase
+  "iap_sandbox_emails":    [],      // production: Builtly account emails allowed when the flag is false
   "email": {
     "from_name": "Acme", "from_address": "no-reply@mail.acme.com", "reply_to": "",
     "action_base_url": "https://acme.com/account"     // links: {base}/verify?token=…, {base}/reset?token=…
@@ -1111,16 +1112,17 @@ sequenceDiagram
 
 **Apple** (`billing/appstore`)
 
-- `GET https://api.storekit.itunes.apple.com/inApps/v1/transactions/{transactionId}`; on 404 and `allow_iap_sandbox` retry `https://api.storekit-sandbox.itunes.apple.com`.
+- `GET https://api.storekit.itunes.apple.com/inApps/v1/transactions/{transactionId}` first. If the caller may use sandbox and production returns 404 or 401, retry `https://api.storekit-sandbox.itunes.apple.com`. 401 is required because, before the app's first production release, Apple returns an empty 401 for a sandbox transaction id instead of `4040010`. Callers who may not use sandbox are not sent to the sandbox host.
 - Auth: ES256 JWT (`kid=key_id`; `iss=issuer_id`, `iat`, `exp=iat+5m`, `aud="appstoreconnect-v1"`, `bid=bundle_id`), cached 4 min.
 - Verify `signedTransactionInfo` JWS: `alg=ES256`; `x5c` chain to the embedded **Apple Root CA – G3**; leaf OID `1.2.840.113635.100.6.11.1`, intermediate OID `1.2.840.113635.100.6.2.1`; signature with leaf key. Shared with notifications (§3.7).
-- Rules: `bundleId == connection.bundle_id`; `type == "Consumable"`; no `revocationDate`; `environment` Production (or Sandbox when allowed); `appAccountToken`, if present, == caller `user_id`.
+- Sandbox is allowed when `allow_iap_sandbox` is true, or when it is false and the caller's email is in `iap_sandbox_emails`. The list is the Builtly account email, not the Apple ID.
+- Rules: `bundleId == connection.bundle_id`; `type == "Consumable"`; no `revocationDate`; `environment` Production, or Sandbox when the caller may use sandbox. `appAccountToken`, if present, == caller `user_id`. When sandbox is allowed only via `iap_sandbox_emails`, `appAccountToken` is required and must equal the caller — the global flag leaves it optional so a test-app guest created after payment can still verify.
 
 **Google** (`billing/playstore`)
 
 - OAuth2 service account (`golang.org/x/oauth2/google`), scope `androidpublisher`.
 - `GET https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{package}/purchases/products/{productId}/tokens/{token}`.
-- Rules: `purchaseState == 0`; `purchaseType` absent, or `0` (test) only if sandbox allowed; `obfuscatedExternalAccountId`, if present, == caller `user_id`; `consumptionState == 1` without a purchase row → `already_consumed`.
+- Rules: `purchaseState == 0`; `purchaseType` absent, or `0` (test) only if the caller may use sandbox (same flag and `iap_sandbox_emails` as Apple). `obfuscatedExternalAccountId`, if present, == caller `user_id`. When a test purchase is allowed only via the email list, that id is required. `consumptionState == 1` without a purchase row → `already_consumed`.
 - Consume: `POST …/tokens/{token}:consume`.
 
 ### 3.7 Refunds & clawback
@@ -1149,7 +1151,7 @@ Policy: **full clawback even if spent** — the balance may become negative; `ai
 
 1. Body `{signedPayload}` → verify JWS chain (as §3.6). Reject on failure (400).
 2. Dedupe on `notificationUUID` in `webhook_events`.
-3. App = `Resolver.AppForConnection(apple_iap, connection_id)` (exclusive). `data.bundleId` must equal the connection's `bundle_id`; `data.environment` per sandbox rule.
+3. App = `Resolver.AppForConnection(apple_iap, connection_id)` (exclusive). `data.bundleId` must equal the connection's `bundle_id`. Sandbox notifications are still processed when `allow_iap_sandbox` is false, so a refund of a purchase accepted via `iap_sandbox_emails` is clawed back; a sandbox notification with no purchase row is ignored.
 4. Decode `data.signedTransactionInfo` (verify JWS) → `transactionId` → purchase. Handle `REFUND`, `REFUND_REVERSED`; others → `ignored`. Respond 200; 500 only on transient errors (Apple retries).
 
 **Google voided purchases** — hourly per `google_play` connection: `GET …/applications/{package}/purchases/voidedpurchases?startTime=<cursor − 1 h overlap>&type=0` with pagination; for each item, find purchase by `sha256(purchaseToken)` → `applyRefund`; save the max `voidedTimeMillis` to `job_state`. First run uses now − 30 days (API maximum ⚠ verify).
@@ -1466,7 +1468,7 @@ Rules are read from the app's **current** settings at processing time. Redeliver
 { "platform": "google", "product_id": "credits_100", "purchase_token": "…" }
 ```
 
-→ **200** `{ "purchase_id": "0192…", "product_id": "0192…", "credits_added": 100, "balance": 250, "already_processed": false }`. Errors: 409 `purchase_already_claimed`, 422 `receipt_invalid` (`details.reason`: `wrong_app`, `revoked`, `not_consumable`, `sandbox_not_allowed`, `account_mismatch`, `already_consumed`, `not_found`), 422 `product_not_available` / `integration_not_configured`, 502 `upstream_error`.
+→ **200** `{ "purchase_id": "0192…", "product_id": "0192…", "credits_added": 100, "balance": 250, "already_processed": false }`. Errors: 409 `purchase_already_claimed`, 422 `receipt_invalid` (`details.reason`: `wrong_app`, `revoked`, `not_consumable`, `sandbox_not_allowed`, `account_mismatch`, `account_token_required`, `already_consumed`, `not_found`), 422 `product_not_available` / `integration_not_configured`, 502 `upstream_error`.
 
 `POST /webhooks/apple/{connection_id}` — `{ "signedPayload": "…" }`; §3.7.
 
