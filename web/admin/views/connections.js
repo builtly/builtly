@@ -229,6 +229,46 @@ function stripeLiveFromKey(key) {
   return null;
 }
 
+/** Events the Stripe webhook handler actually acts on. Invoice and subscription events are ignored. */
+const STRIPE_WEBHOOK_EVENTS = [
+  { group: "Collect", name: "checkout.session.completed", why: "Grant credits when the session is paid" },
+  { group: "Collect", name: "checkout.session.async_payment_succeeded", why: "Grant credits after a delayed method clears" },
+  { group: "Collect", name: "checkout.session.async_payment_failed", why: "Mark the purchase failed" },
+  { group: "Collect", name: "checkout.session.expired", why: "Expire a purchase still pending" },
+  { group: "Reverse", name: "charge.refunded", why: "Claw back credits for the refunded amount" },
+  { group: "Reverse", name: "charge.dispute.created", why: "Claw back the full grant when a dispute opens" },
+  { group: "Reverse", name: "charge.dispute.closed", why: "Restore credits if the dispute is won" },
+];
+
+function stripeWebhookSlip() {
+  let group = "";
+  const rows = STRIPE_WEBHOOK_EVENTS.map((e, i) => {
+    const mark = e.group !== group
+      ? `<div class="wh-slip__group">${esc(e.group)}</div>`
+      : "";
+    group = e.group;
+    return `${mark}<div class="wh-slip__row" role="listitem" data-reveal="${i}">
+      <span class="wh-slip__n" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span>
+      <button type="button" class="wh-slip__event copy-url" data-url="${esc(e.name)}" data-copied="${esc(e.name)}">${esc(e.name)}</button>
+      <span class="wh-slip__why">${esc(e.why)}</span>
+    </div>`;
+  }).join("");
+  return `<aside class="wh-slip" aria-label="Stripe webhook events to register">
+    <div class="wh-slip__rail" aria-hidden="true"><span>07</span><span>Listen</span></div>
+    <div class="wh-slip__body">
+      <div class="wh-slip__head">
+        <div>
+          <p class="user-kicker">Endpoint · one-time checkout</p>
+          <h2 class="wh-slip__title">Register these seven</h2>
+          <p class="wh-slip__lede">Paste each connection's webhook URL into Stripe, then select only this set. Invoice and subscription events are ignored.</p>
+        </div>
+        <button type="button" class="conn-copy copy-url wh-slip__copy" data-copy="stripe-events" data-copied="Webhook events">Copy events</button>
+      </div>
+      <div class="wh-slip__list" role="list">${rows}</div>
+    </div>
+  </aside>`;
+}
+
 function stripeModeTag(mode) {
   if (mode === true) {
     return `<span class="conn-mode-tag conn-mode-tag--live" data-stripe-mode="live">LIVE</span>`;
@@ -629,6 +669,8 @@ export async function renderConnections(el) {
       </div>
     </div>
 
+    ${provider === "stripe" ? stripeWebhookSlip() : ""}
+
     <div id="conn-drawer" class="conn-drawer" hidden></div>
 
     ${items.length
@@ -654,7 +696,7 @@ export async function renderConnections(el) {
           <button type="button" class="conn-create" id="conn-add-empty">Add the first one</button>
         </div>`}`;
 
-  applyRevealDelays(el, ".conn-row[data-reveal]");
+  applyRevealDelays(el, ".conn-row[data-reveal], .wh-slip__row[data-reveal]");
 
   const openCreate = () => {
     openDrawer(el, `Add ${schema.label}`, `<form id="create-conn">${formMarkup(schema, { mode: "create", values: {}, redirectURL, wantRedirect: showRedirect })}</form>`);
@@ -748,12 +790,15 @@ export async function renderConnections(el) {
     el.addEventListener("click", async (ev) => {
       const btn = ev.target.closest(".copy-url");
       if (!btn || !el.contains(btn)) return;
+      const text = btn.dataset.copy === "stripe-events"
+        ? STRIPE_WEBHOOK_EVENTS.map((e) => e.name).join("\n")
+        : btn.dataset.url;
       const label = btn.dataset.copied || "URL";
       try {
-        await navigator.clipboard.writeText(btn.dataset.url);
+        await navigator.clipboard.writeText(text);
         showOk(label + " copied");
       } catch {
-        showOk(btn.dataset.url);
+        showOk(text);
       }
     });
   }

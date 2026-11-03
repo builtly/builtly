@@ -1126,6 +1126,211 @@ input[type="reset"],
   background: rgba(100, 116, 139, 0.08);
 }
 
+.wh-slip {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  margin: 0 0 1.05rem;
+  border: 1.5px solid var(--user-ink);
+  border-radius: 0.12rem;
+  background: #fffdf8;
+  box-shadow: 4px 4px 0 rgba(26, 31, 43, 0.1);
+  overflow: hidden;
+}
+
+.wh-slip__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-right: 1.5px dashed rgba(26, 31, 43, 0.35);
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(26, 31, 43, 0.05) 3px,
+      rgba(26, 31, 43, 0.05) 6px
+    ),
+    #efe8dc;
+  color: var(--user-ink);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.wh-slip__rail span:first-child {
+  font-family: var(--admin-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+
+.wh-slip__rail span:last-child {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.wh-slip__body {
+  min-width: 0;
+  padding: 0.85rem 0.95rem 0.7rem;
+  background:
+    linear-gradient(90deg, rgba(196, 92, 22, 0.07) 0, rgba(196, 92, 22, 0.07) 0.22rem, transparent 0.22rem),
+    repeating-linear-gradient(
+      -12deg,
+      transparent,
+      transparent 11px,
+      rgba(26, 31, 43, 0.025) 11px,
+      rgba(26, 31, 43, 0.025) 12px
+    ),
+    #fffdf8;
+}
+
+.wh-slip__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 0.7rem;
+}
+
+.wh-slip__head .user-kicker {
+  margin: 0 0 0.15rem;
+}
+
+.wh-slip__title {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--user-ink);
+  --pico-typography-spacing-top: 0;
+}
+
+.wh-slip__lede {
+  max-width: 38rem;
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #5c6570;
+}
+
+.wh-slip__copy {
+  flex: 0 0 auto;
+  margin: 0.15rem 0 0;
+}
+
+.wh-slip__list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1.5px solid var(--user-ink);
+}
+
+.wh-slip__group {
+  margin: 0.55rem 0 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--user-amber);
+}
+
+.wh-slip__row {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(12rem, 1.4fr) minmax(0, 1fr);
+  gap: 0.45rem 0.7rem;
+  align-items: baseline;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid rgba(26, 31, 43, 0.08);
+  animation: user-row-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--reveal, 0) * 28ms);
+}
+
+.wh-slip__n {
+  font-family: var(--admin-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9aa1b0;
+}
+
+.wh-slip__event {
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--user-ink);
+  font-family: var(--admin-mono);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+  box-shadow: none;
+  cursor: copy;
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  --pico-color: var(--user-ink);
+  --pico-box-shadow: none;
+}
+
+.wh-slip__event:hover,
+.wh-slip__event:focus {
+  color: var(--user-amber);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  --pico-color: var(--user-amber);
+  --pico-background-color: transparent;
+}
+
+.wh-slip__why {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #5c6570;
+}
+
+@media (max-width: 720px) {
+  .wh-slip {
+    grid-template-columns: 1fr;
+  }
+
+  .wh-slip__rail {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.65rem;
+    padding: 0.4rem 0.7rem;
+    border-right: none;
+    border-bottom: 1.5px dashed rgba(26, 31, 43, 0.35);
+  }
+
+  .wh-slip__rail span:last-child {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+
+  .wh-slip__head {
+    flex-wrap: wrap;
+  }
+
+  .wh-slip__row {
+    grid-template-columns: 1.6rem 1fr;
+  }
+
+  .wh-slip__why {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wh-slip__row { animation: none; }
+}
+
 .conn-drawer input:not([type="checkbox"]),
 .conn-drawer select,
 .conn-drawer textarea {
